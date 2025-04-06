@@ -1,0 +1,125 @@
+# .clinerules for AI-RAG-Examples-KM
+
+## Project Patterns
+
+### Code Organization
+- The project follows a modular architecture with clear separation of concerns
+- Core components are organized in the root directory
+- Specialized implementations are in subdirectories (AzureCosmosDb, AzureCosmosDbTabular)
+- Configuration is centralized in appsettings.json and loaded via KernelSetup.cs
+
+### Naming Conventions
+- Class names are descriptive and follow PascalCase (e.g., BlobStorageProcessor)
+- Interface names start with "I" (e.g., IContentDecoder)
+- Private fields use underscore prefix (e.g., _memory)
+- Constants use UPPER_CASE or PascalCase depending on scope
+- Configuration classes use descriptive names with "Config" or "Settings" suffix
+
+### Error Handling
+- Exceptions are caught and logged with meaningful messages
+- Processing continues where possible after non-critical errors
+- Azure service errors are handled specifically with appropriate error messages
+- Console output is used for status updates and error reporting
+
+### Documentation
+- XML documentation is used for public APIs
+- Comments explain complex logic or non-obvious implementations
+- Console output provides progress information during execution
+- README files provide overview information for directories
+
+## Implementation Details
+
+*(Note: The source repository `X:\AI\Kernel-Memory-Clone\kernel-memory\extensions` contains both a standard `AzureCosmosDb` vector store extension and the specialized `AzureCosmosDbTabular` extension used in this project.)*
+
+### Tabular Data Processing
+- Excel files are processed using the TabularExcelDecoder
+- Data types are preserved when PreserveDataTypes = true
+- Headers are normalized to remove special characters
+- Each row becomes a separate memory record with preserved structure in the `Data` field.
+- Text representation follows the format "Record from worksheet X, row Y: Column1 is Value1. Column2 is Value2." This specific format is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the `Data` and `Source` fields; changes require synchronization between the decoder and the record class.
+
+### Filter Generation
+- Natural language queries are analyzed to extract structured filters
+- Field names are prefixed with "data." for structured fields (e.g., `data.column_name`).
+- When querying, the `AzureCosmosDbTabularMemory` normalizes these field names (e.g., converting camelCase `data.serverPurpose` to snake_case `data.server_purpose`) before building the SQL query, assuming snake_case keys in the stored `Data` object.
+- The filter generation prompt includes examples for common query patterns.
+- Generated filters are applied to the Cosmos DB query.
+
+### Query Processing
+- Queries can use direct search or AI-assisted approaches
+- Results include source attribution with document details
+- Response formatting is handled by the KernelMemoryQueryProcessor
+- The system can handle both general questions and specific data queries
+
+## Configuration Requirements
+
+### Azure OpenAI
+- Requires separate configurations for text and embedding models
+- Auth type must be set to APIKey after binding from configuration
+- Deployment names must match valid deployments in the Azure OpenAI service
+
+### Azure Cosmos DB
+- Requires endpoint and API key.
+- Default database name is "memory" if not specified via `AzureCosmosDbTabularConfig`.
+- **Indexing:** For the `AzureCosmosDbTabular` extension, the container indexing policy *must* include the `/data/*` path to enable filtering on structured fields. The `/embedding/*` path should generally be excluded from standard indexing.
+
+### Azure Blob Storage
+- Configured with container URL and optional SAS token
+- Local download path must exist or be created before processing
+
+## Testing Approach
+
+### Sample Queries
+- "Give me a list of all server names with a Server Purpose of 'Corelight Network monitoring sensor'"
+- "What servers are running Windows Server 2019 in the East US location?"
+- "What is the server purpose for VAXVNAGG01?"
+
+### Test Data
+- Excel files with server information are used for testing
+- Files should include columns for server name, purpose, environment, etc.
+- Both local files and blob storage can be used as data sources
+
+## Common Workflows
+
+### Adding a New Document Source
+1. Configure the source in appsettings.json
+2. Create an instance of BlobStorageProcessor with appropriate parameters
+3. Call ProcessBlobsFromStorageAsync() or ProcessFilesFromLocalDirectoryAsync()
+
+### Implementing a Custom Decoder
+1. Create a new class implementing IContentDecoder
+2. Override SupportsMimeType() to indicate supported file types
+3. Implement DecodeAsync() to process the content
+4. Register the decoder in the memory pipeline
+
+### Adding a New Query Type
+1. Extend the filter generation prompt to handle the new query pattern
+2. Update the KernelMemoryQueryProcessor to process the new query type
+3. Test with sample queries to verify accuracy
+
+## Troubleshooting Guide
+
+### Common Issues
+
+#### "Failed to load Excel file"
+- Check if the file contains PivotTables (known issue with ClosedXML)
+- Verify the file is not corrupted or password-protected
+- Try opening and resaving the file in Excel
+
+#### "Could not access the memory DB instance"
+- Verify that the memory instance is properly initialized
+- Check that the correct memory implementation is being used
+- Ensure the configuration is properly loaded
+
+#### "Filter generation error"
+- Check the format of the query
+- Verify that the filter generation prompt is properly formatted
+- Look for complex or ambiguous field names in the query
+
+#### "Azure service errors"
+- Verify that all API keys and endpoints are correctly configured.
+- Check Azure service status for any outages.
+- Ensure that rate limits have not been exceeded.
+
+#### Reflection Usage in TabularFilterHelper
+- The `TabularFilterHelper` uses reflection to access the internal `_memoryDb` field of `IKernelMemory`. This could break if the internal structure of `KernelMemory` changes in future versions. Consider alternatives if this becomes an issue.
