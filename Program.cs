@@ -1,4 +1,4 @@
-﻿﻿﻿﻿using Microsoft.KernelMemory;
+﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
