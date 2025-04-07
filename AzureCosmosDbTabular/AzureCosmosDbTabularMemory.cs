@@ -170,10 +170,6 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     /// <inheritdoc/>
     public async Task<string> UpsertAsync(string index, MemoryRecord record, CancellationToken cancellationToken = default)
     {
-        // Create the Cosmos DB record directly from the memory record
-        // The FromMemoryRecord method now handles extracting tabular_data and source_info from the payload
-        var memoryRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(record);
-
         // Extract dataset name from tags if available
         string? datasetName = null;
         if (record.Tags.TryGetValue("dataset_name", out var datasetNames) && 
@@ -183,15 +179,56 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             datasetName = datasetNames[0];
         }
 
+        // Extract source file name from tags if available
+        string sourceFileName = "excel_import";
+        if (record.Tags.TryGetValue("source_file", out var sourceFiles) && 
+            sourceFiles != null && 
+            sourceFiles.Count > 0)
+        {
+            sourceFileName = sourceFiles[0];
+        }
+
+        // Variables to store schema ID and import batch ID
+        string schemaId = string.Empty;
+        string importBatchId = string.Empty;
+
+        // Extract tabular data from the record
+        Dictionary<string, object> tabularData = new();
+        if (record.Payload.TryGetValue("tabular_data", out var tabularDataObj) && 
+            tabularDataObj is string tabularDataStr)
+        {
+            try
+            {
+                tabularData = JsonSerializer.Deserialize<Dictionary<string, object>>(
+                    tabularDataStr, 
+                    AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions) ?? new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogWarning(ex, "Failed to deserialize tabular data for record {Id}", record.Id);
+            }
+        }
+
         // Check if we need to extract schema information
         if (this._config.EnableSchemaManagement && 
             this._config.ExtractSchemaOnImport && 
             !string.IsNullOrEmpty(datasetName) && 
-            memoryRecord.Data.Count > 0)
+            tabularData.Count > 0)
         {
-            // Try to extract and store schema information
-            await this.ExtractAndStoreSchemaAsync(datasetName, memoryRecord.Data, cancellationToken).ConfigureAwait(false);
+            // Create or update schema and get its ID and import batch ID
+            (schemaId, importBatchId) = await this.CreateOrUpdateSchemaAsync(
+                datasetName, 
+                sourceFileName, 
+                tabularData, 
+                index, 
+                cancellationToken).ConfigureAwait(false);
         }
+
+        // Create the Cosmos DB record from the memory record, including schema ID and import batch ID
+        var memoryRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(
+            record, 
+            schemaId: schemaId, 
+            importBatchId: importBatchId);
 
         var result = await this._cosmosClient
             .GetDatabase(this._databaseName)
@@ -202,6 +239,63 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return result.Resource.Id;
+    }
+
+    /// <summary>
+    /// Creates or updates a schema for the given dataset and returns its ID and import batch ID.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="sourceFileName">The source file name.</param>
+    /// <param name="data">The tabular data to extract schema from.</param>
+    /// <param name="indexName">The index name to store the schema in.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A tuple containing the schema ID and import batch ID.</returns>
+    private async Task<(string SchemaId, string ImportBatchId)> CreateOrUpdateSchemaAsync(
+        string datasetName,
+        string sourceFileName,
+        Dictionary<string, object> data,
+        string indexName,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Check if schema already exists
+            var existingSchema = await this.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
+            
+            if (existingSchema != null)
+            {
+                // Update existing schema with new column information
+                await this.UpdateSchemaAsync(existingSchema, data, cancellationToken).ConfigureAwait(false);
+                return (existingSchema.Id, existingSchema.ImportBatchId);
+            }
+
+            // Create new schema with a unique ID and import batch ID
+            var schema = TabularDataSchema.Create(datasetName, sourceFileName);
+
+            // Extract column information
+            foreach (var kvp in data)
+            {
+                var column = new SchemaColumn
+                {
+                    Name = kvp.Key,
+                    NormalizedName = NormalizeColumnName(kvp.Key),
+                    DataType = InferDataType(kvp.Value),
+                    CommonValues = new List<string> { kvp.Value?.ToString() ?? string.Empty }
+                };
+
+                schema.Columns.Add(column);
+            }
+
+            // Store schema in the specified index
+            await this.StoreSchemaAsync(schema, indexName, cancellationToken).ConfigureAwait(false);
+            
+            return (schema.Id, schema.ImportBatchId);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error creating or updating schema for dataset {DatasetName}", datasetName);
+            return (string.Empty, string.Empty);
+        }
     }
 
     /// <inheritdoc/>
@@ -1060,6 +1154,168 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
 
         // Trim underscores from start and end
         return snakeCase.Trim('_');
+    }
+
+    /// <summary>
+    /// Gets all records that belong to a specific schema.
+    /// </summary>
+    /// <param name="index">The index name.</param>
+    /// <param name="schemaId">The schema ID.</param>
+    /// <param name="limit">The maximum number of records to return.</param>
+    /// <param name="withEmbeddings">Whether to include embeddings in the results.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>An async enumerable of memory records.</returns>
+    public async IAsyncEnumerable<MemoryRecord> GetRecordsBySchemaIdAsync(
+        string index,
+        string schemaId,
+        int limit = 100,
+        bool withEmbeddings = false,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var sql = $"""
+                   SELECT TOP @limit
+                     {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
+                   FROM c
+                   WHERE c.schemaId = @schemaId
+                   """;
+
+        var queryDefinition = new QueryDefinition(sql)
+            .WithParameter("@limit", limit)
+            .WithParameter("@schemaId", schemaId);
+
+        using var feedIterator = this._cosmosClient
+            .GetDatabase(this._databaseName)
+            .GetContainer(index)
+            .GetItemQueryIterator<AzureCosmosDbTabularMemoryRecord>(queryDefinition);
+
+        while (feedIterator.HasMoreResults)
+        {
+            var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var record in response)
+            {
+                yield return record.ToMemoryRecord(withEmbeddings);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets all records that belong to a specific import batch.
+    /// </summary>
+    /// <param name="index">The index name.</param>
+    /// <param name="importBatchId">The import batch ID.</param>
+    /// <param name="limit">The maximum number of records to return.</param>
+    /// <param name="withEmbeddings">Whether to include embeddings in the results.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>An async enumerable of memory records.</returns>
+    public async IAsyncEnumerable<MemoryRecord> GetRecordsByImportBatchIdAsync(
+        string index,
+        string importBatchId,
+        int limit = 100,
+        bool withEmbeddings = false,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var sql = $"""
+                   SELECT TOP @limit
+                     {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
+                   FROM c
+                   WHERE c.importBatchId = @importBatchId
+                   """;
+
+        var queryDefinition = new QueryDefinition(sql)
+            .WithParameter("@limit", limit)
+            .WithParameter("@importBatchId", importBatchId);
+
+        using var feedIterator = this._cosmosClient
+            .GetDatabase(this._databaseName)
+            .GetContainer(index)
+            .GetItemQueryIterator<AzureCosmosDbTabularMemoryRecord>(queryDefinition);
+
+        while (feedIterator.HasMoreResults)
+        {
+            var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var record in response)
+            {
+                yield return record.ToMemoryRecord(withEmbeddings);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the schema for a specific record.
+    /// </summary>
+    /// <param name="index">The index name.</param>
+    /// <param name="recordId">The record ID.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema, or null if not found.</returns>
+    public async Task<TabularDataSchema?> GetSchemaForRecordAsync(
+        string index,
+        string recordId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // First, get the record to find its schema ID
+            var encodedId = AzureCosmosDbTabularMemoryRecord.EncodeId(recordId);
+            var queryDefinition = new QueryDefinition(
+                "SELECT c.schemaId FROM c WHERE c.id = @id")
+                .WithParameter("@id", encodedId);
+
+            using var feedIterator = this._cosmosClient
+                .GetDatabase(this._databaseName)
+                .GetContainer(index)
+                .GetItemQueryIterator<dynamic>(queryDefinition);
+
+            if (feedIterator.HasMoreResults)
+            {
+                var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                var record = response.FirstOrDefault();
+                
+                if (record != null && record.schemaId != null)
+                {
+                    string schemaId = record.schemaId.ToString();
+                    
+                    // Now get the schema by ID
+                    var schemaQueryDefinition = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.id = @id")
+                        .WithParameter("@id", schemaId);
+
+                    // Try to find the schema in any of the available indexes
+                    var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+                    foreach (var idx in indexes)
+                    {
+                        try
+                        {
+                            using var schemaIterator = this._cosmosClient
+                                .GetDatabase(this._databaseName)
+                                .GetContainer(idx)
+                                .GetItemQueryIterator<TabularDataSchema>(schemaQueryDefinition);
+
+                            if (schemaIterator.HasMoreResults)
+                            {
+                                var schemaResponse = await schemaIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                                var schema = schemaResponse.FirstOrDefault();
+                                if (schema != null)
+                                {
+                                    return schema;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            this._logger.LogWarning(ex, "Error searching for schema in container {Container}", idx);
+                            // Continue to the next container
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error getting schema for record {RecordId}", recordId);
+            return null;
+        }
     }
 
     /// <summary>

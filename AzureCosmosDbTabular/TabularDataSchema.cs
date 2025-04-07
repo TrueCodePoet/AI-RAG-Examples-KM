@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.Json.Serialization;
 
 namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
@@ -24,7 +25,7 @@ public class TabularDataSchema
     public string DatasetName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the source file name.
+    /// Gets or sets the original source file name.
     /// </summary>
     [JsonPropertyName("sourceFile")]
     public string SourceFile { get; set; } = string.Empty;
@@ -34,6 +35,13 @@ public class TabularDataSchema
     /// </summary>
     [JsonPropertyName("importDate")]
     public DateTime ImportDate { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Gets or sets the unique import batch identifier.
+    /// This is used to group all rows from the same import operation.
+    /// </summary>
+    [JsonPropertyName("importBatchId")]
+    public string ImportBatchId { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
     /// Gets or sets the columns in the schema.
@@ -59,6 +67,28 @@ public class TabularDataSchema
     /// </summary>
     /// <returns>The partition key.</returns>
     internal Microsoft.Azure.Cosmos.PartitionKey GetPartitionKey() => new(File);
+
+    /// <summary>
+    /// Creates a new schema with a unique ID based on the source file and timestamp.
+    /// </summary>
+    /// <param name="datasetName">The name of the dataset.</param>
+    /// <param name="sourceFile">The source file name.</param>
+    /// <returns>A new TabularDataSchema instance.</returns>
+    public static TabularDataSchema Create(string datasetName, string sourceFile)
+    {
+        string timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        string uniqueId = $"schema_{Path.GetFileNameWithoutExtension(sourceFile)}_{timestamp}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+        
+        return new TabularDataSchema
+        {
+            Id = uniqueId,
+            DatasetName = datasetName,
+            SourceFile = sourceFile,
+            ImportDate = DateTime.UtcNow,
+            File = datasetName, // Partition key is still the dataset name for efficient querying
+            ImportBatchId = Guid.NewGuid().ToString()
+        };
+    }
 }
 
 /// <summary>

@@ -40,6 +40,16 @@ internal class AzureCosmosDbTabularMemoryRecord
     /// </summary>
     internal const string DataField = "data";
 
+    /// <summary>
+    /// Field name for the schema identifier.
+    /// </summary>
+    internal const string SchemaIdField = "schemaId";
+
+    /// <summary>
+    /// Field name for the import batch identifier.
+    /// </summary>
+    internal const string ImportBatchIdField = "importBatchId";
+
     private const string IdField = "id";
     private const string PayloadField = "payload";
     private const string SourceField = "source";
@@ -89,6 +99,19 @@ internal class AzureCosmosDbTabularMemoryRecord
     public Dictionary<string, string> Source { get; init; } = [];
 
     /// <summary>
+    /// Gets or sets the schema identifier that this record belongs to.
+    /// </summary>
+    [JsonPropertyName(SchemaIdField)]
+    public string SchemaId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the import batch identifier.
+    /// This is used to group all rows from the same import operation.
+    /// </summary>
+    [JsonPropertyName(ImportBatchIdField)]
+    public string ImportBatchId { get; init; } = string.Empty;
+
+    /// <summary>
     /// Gets the partition key for this record.
     /// </summary>
     /// <returns>The partition key.</returns>
@@ -105,7 +128,7 @@ internal class AzureCosmosDbTabularMemoryRecord
 
     private static IEnumerable<string> GetColumns(string? alias = default, bool withEmbeddings = false)
     {
-        string[] fieldNames = [IdField, FileField, TagsField, DataField, SourceField, VectorField, PayloadField];
+        string[] fieldNames = [IdField, FileField, TagsField, DataField, SourceField, VectorField, PayloadField, SchemaIdField, ImportBatchIdField];
         foreach (var name in fieldNames)
         {
             if (!withEmbeddings
@@ -145,6 +168,17 @@ internal class AzureCosmosDbTabularMemoryRecord
             memoryRecord.Payload["source_info"] = JsonSerializer.Serialize(Source, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
         }
 
+        // Add schema ID and import batch ID to the payload if they exist
+        if (!string.IsNullOrEmpty(this.SchemaId))
+        {
+            memoryRecord.Payload["schema_id"] = this.SchemaId;
+        }
+
+        if (!string.IsNullOrEmpty(this.ImportBatchId))
+        {
+            memoryRecord.Payload["import_batch_id"] = this.ImportBatchId;
+        }
+
         if (withEmbedding && this.Vector.Length > 0) // Use Length for array
         {
             // Reconstruct Embedding object from the float array
@@ -160,11 +194,15 @@ internal class AzureCosmosDbTabularMemoryRecord
     /// <param name="record">The memory record.</param>
     /// <param name="data">Optional tabular data to include.</param>
     /// <param name="source">Optional source information to include.</param>
+    /// <param name="schemaId">Optional schema ID that this record belongs to.</param>
+    /// <param name="importBatchId">Optional import batch ID for grouping related records.</param>
     /// <returns>The memory record.</returns>
     internal static AzureCosmosDbTabularMemoryRecord FromMemoryRecord(
         MemoryRecord record,
         Dictionary<string, object>? data = null,
-        Dictionary<string, string>? source = null)
+        Dictionary<string, string>? source = null,
+        string? schemaId = null,
+        string? importBatchId = null)
     {
         var id = EncodeId(record.Id);
         var fileId = record.GetFileId();
@@ -172,6 +210,20 @@ internal class AzureCosmosDbTabularMemoryRecord
         // Initialize with empty data/source dictionaries
         Dictionary<string, object> extractedData = new();
         Dictionary<string, string> extractedSource = new();
+
+        // Extract schema ID and import batch ID from payload if they exist
+        string extractedSchemaId = string.Empty;
+        string extractedImportBatchId = string.Empty;
+
+        if (record.Payload.TryGetValue("schema_id", out var schemaIdObj) && schemaIdObj is string schemaIdStr)
+        {
+            extractedSchemaId = schemaIdStr;
+        }
+
+        if (record.Payload.TryGetValue("import_batch_id", out var importBatchIdObj) && importBatchIdObj is string importBatchIdStr)
+        {
+            extractedImportBatchId = importBatchIdStr;
+        }
 
         // Extract structured data from the text field in the payload
         if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
@@ -209,7 +261,10 @@ internal class AzureCosmosDbTabularMemoryRecord
             // Vector assignment remains unchanged
             Vector = record.Vector.Data.ToArray(),
             Data = finalData,
-            Source = finalSource
+            Source = finalSource,
+            // Use provided values first, then extracted values from payload, then empty string
+            SchemaId = schemaId ?? extractedSchemaId ?? string.Empty,
+            ImportBatchId = importBatchId ?? extractedImportBatchId ?? string.Empty
         };
 
         return memoryRecord;
