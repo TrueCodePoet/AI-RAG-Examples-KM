@@ -71,9 +71,14 @@ The project is currently focused on implementing and testing the tabular data pr
 6. **Excel PivotTable Handling**: Excel files with PivotTables can cause processing errors, now addressed with improved error detection and handling.
 7. **Type Compatibility**: Fixed issues with TabularExcelDecoder where internal/public type accessibility conflicts prevented proper schema extraction.
 8. **Schema Storage**: Fixed issue where TabularExcelDecoder's `_memory` field was null, preventing schema from being saved. Implemented a two-part solution:
-   - Enhanced dependency injection to properly resolve the AzureCosmosDbTabularMemory instance
+   - Enhanced dependency injection to properly resolve the IMemoryDb instance
    - Added a WithMemory method to TabularExcelDecoder to allow setting the memory instance after creation
    - Used reflection to find and update TabularExcelDecoder instances in the pipeline at runtime
+
+9. **Interface-based Design**: Improved code by using the IMemoryDb interface instead of the concrete AzureCosmosDbTabularMemory class:
+   - Modified TabularExcelDecoder to accept IMemoryDb instead of AzureCosmosDbTabularMemory
+   - Updated Program.cs to work with IMemoryDb for better abstraction
+   - This change improves maintainability and allows for easier swapping of memory implementations
 
 ## Rate Limiting Considerations
 

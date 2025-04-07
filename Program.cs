@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿using Microsoft.KernelMemory;
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -27,18 +27,18 @@ var memory = KernelInitializer.InitializeMemory(
     appConfig.CosmosDbSettings,
     IndexName); // Pass the index name to use as dataset name
  
-// Get the AzureCosmosDbTabularMemory instance from the memory object
+// Get the IMemoryDb instance from the memory object
 var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(memory);
 if (memoryDb != null)
 {
-    Console.WriteLine("Successfully obtained AzureCosmosDbTabularMemory instance");
+    Console.WriteLine("Successfully obtained IMemoryDb instance");
     
     // Find and update TabularExcelDecoder instances in the pipeline
     MemoryHelper.SetMemoryOnTabularExcelDecoders(memory, memoryDb);
 }
 else
 {
-    Console.WriteLine("Warning: Could not obtain AzureCosmosDbTabularMemory instance");
+    Console.WriteLine("Warning: Could not obtain IMemoryDb instance");
 }
 
 // Create an instance of BlobStorageProcessor
@@ -92,8 +92,8 @@ public class CosmosDbSettings
 // Helper class for memory-related operations
 internal static class MemoryHelper
 {
-    // Helper method to get the AzureCosmosDbTabularMemory instance from the memory object
-    internal static AzureCosmosDbTabularMemory? GetMemoryDbFromKernelMemory(IKernelMemory memory)
+    // Helper method to get the IMemoryDb instance from the memory object
+    internal static IMemoryDb? GetMemoryDbFromKernelMemory(IKernelMemory memory)
     {
         try
         {
@@ -105,14 +105,14 @@ internal static class MemoryHelper
             {
                 var memoryDb = memoryDbField.GetValue(memory);
                 
-                // Check if it's the right type
-                if (memoryDb is AzureCosmosDbTabularMemory tabularMemory)
+                // Check if it's an IMemoryDb
+                if (memoryDb is IMemoryDb memoryDbInstance)
                 {
-                    return tabularMemory;
+                    return memoryDbInstance;
                 }
                 else
                 {
-                    Console.WriteLine($"Memory DB is not AzureCosmosDbTabularMemory, it's {memoryDb?.GetType().FullName ?? "null"}");
+                    Console.WriteLine($"Memory DB is not IMemoryDb, it's {memoryDb?.GetType().FullName ?? "null"}");
                 }
             }
             else
@@ -129,7 +129,21 @@ internal static class MemoryHelper
     }
 
     // Helper method to find and update TabularExcelDecoder instances in the pipeline
-    internal static void SetMemoryOnTabularExcelDecoders(IKernelMemory memory, AzureCosmosDbTabularMemory memoryDb)
+    internal static void SetMemoryOnTabularExcelDecoders(IKernelMemory memory, IMemoryDb memoryDb)
+    {
+        // Cast the memoryDb to AzureCosmosDbTabularMemory
+        var azureCosmosDbTabularMemory = memoryDb as AzureCosmosDbTabularMemory;
+        if (azureCosmosDbTabularMemory == null)
+        {
+            Console.WriteLine("Warning: memoryDb is not an instance of AzureCosmosDbTabularMemory");
+            return;
+        }
+        
+        SetMemoryOnTabularExcelDecodersInternal(memory, azureCosmosDbTabularMemory);
+    }
+    
+    // Helper method to find and update TabularExcelDecoder instances in the pipeline
+    private static void SetMemoryOnTabularExcelDecodersInternal(IKernelMemory memory, AzureCosmosDbTabularMemory memoryDb)
     {
         try
         {
