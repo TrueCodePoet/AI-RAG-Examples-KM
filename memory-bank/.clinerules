@@ -148,3 +148,9 @@
 
 #### Reflection Usage in TabularFilterHelper
 - The `TabularFilterHelper` uses reflection to access the internal `_memoryDb` field of `IKernelMemory`. This could break if the internal structure of `KernelMemory` changes in future versions. Consider alternatives if this becomes an issue.
+
+#### Reflection Usage in Program.cs
+- The `GetMemoryDbFromKernelMemory` and `SetMemoryOnTabularExcelDecoders` methods use reflection to access internal fields and methods of the Kernel Memory framework.
+- This approach is used to find and update TabularExcelDecoder instances in the pipeline at runtime.
+- While this works, it's a brittle solution that depends on the internal structure of the framework.
+- Consider requesting a more robust API from the Kernel Memory team for accessing and configuring pipeline components.

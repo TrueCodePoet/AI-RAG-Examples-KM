@@ -57,6 +57,29 @@ public sealed class TabularExcelDecoder : IContentDecoder
         this._datasetName = datasetName;
         return this;
     }
+    
+    /// <summary>
+    /// Creates a new instance with the memory instance set.
+    /// </summary>
+    /// <param name="memory">The memory instance.</param>
+    /// <returns>A new decoder instance with the memory set.</returns>
+    internal TabularExcelDecoder WithMemory(AzureCosmosDbTabularMemory memory)
+    {
+        // Create a new instance with the memory parameter
+        var newDecoder = new TabularExcelDecoder(
+            this._config,
+            memory,
+            null); // Use default logger factory
+        
+        // Copy over the dataset name
+        if (!string.IsNullOrEmpty(this._datasetName))
+        {
+            newDecoder._datasetName = this._datasetName;
+        }
+        
+        this._log.LogInformation("Created new TabularExcelDecoder instance with memory set");
+        return newDecoder;
+    }
 
     /// <summary>
     /// Factory method to create a TabularExcelDecoder with dataset name.
