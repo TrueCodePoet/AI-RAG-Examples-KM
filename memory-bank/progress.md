@@ -11,6 +11,7 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Excel file processing with tabular structure preservation
 - ✅ Data type preservation during extraction
 - ✅ Pipeline orchestration with customizable handlers
+- ✅ PivotTable structure error handling in Excel files
 
 ### Storage and Retrieval
 - ✅ Azure Cosmos DB Tabular implementation
@@ -84,6 +85,11 @@ The project is in a functional prototype stage, with core components implemented
    - **Workaround**: Standardize Excel file formatting before processing.
    - **Planned Fix**: Enhance the decoder to handle more format variations.
 
+3. **PivotTable Handling**: Excel files with PivotTables can cause processing errors.
+   - **Impact**: Files with PivotTables may be skipped during processing.
+   - **Workaround**: Remove PivotTables from Excel files before processing.
+   - **Status**: Fixed with enhanced error detection and handling.
+
 ### Cosmos DB Integration
 1. **Query Complexity**: Complex filters can result in inefficient queries.
    - **Impact**: Slower response times for certain types of questions.
@@ -94,6 +100,12 @@ The project is in a functional prototype stage, with core components implemented
    - **Impact**: Higher than expected Azure costs.
    - **Workaround**: Limit the number of documents processed.
    - **Planned Fix**: Implement tiered storage strategies.
+
+### Rate Limiting
+1. **Azure OpenAI Rate Limits**: Processing large datasets can hit API rate limits.
+   - **Impact**: Processing delays due to required wait times between retries.
+   - **Workaround**: The system already implements retry with backoff.
+   - **Planned Fix**: Add configuration options for rate limiting and batch processing.
 
 ### Technical Dependencies
 1. **Decoder/Record Format Coupling**: The `TabularExcelDecoder` generates text in a specific "sentence format" which is then parsed by `AzureCosmosDbTabularMemoryRecord`. Changes to this format in either component must be synchronized.
@@ -111,9 +123,10 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-03-30 | Tabular data extraction | Completed |
 | 2025-04-05 | Filter generation implementation | Completed |
 | 2025-04-07 | Unified schema storage implementation | Completed |
+| 2025-04-07 | PivotTable error handling | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
-| 2025-04-20 | Documentation and examples | Not Started |
+| 2025-04-20 | Documentation and examples | In Progress |
 
 ## Next Milestone Targets
 

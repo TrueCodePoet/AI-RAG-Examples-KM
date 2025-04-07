@@ -38,6 +38,7 @@
 - Each row becomes a separate memory record with preserved structure in the `Data` field.
 - Text representation follows the format "Record from worksheet X, row Y: Column1 is Value1. Column2 is Value2." This specific format is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the `Data` and `Source` fields; changes require synchronization between the decoder and the record class.
 - Schema information is extracted during import and stored in the same container as the data, with special metadata tags to identify schema documents.
+- PivotTable structures in Excel files are now handled gracefully with the SkipPivotTables configuration option (default: true).
 
 ### Filter Generation
 - Natural language queries are analyzed to extract structured filters
@@ -58,6 +59,10 @@
 - Requires separate configurations for text and embedding models
 - Auth type must be set to APIKey after binding from configuration
 - Deployment names must match valid deployments in the Azure OpenAI service
+- Rate limiting considerations:
+  - Processing large datasets can trigger Azure OpenAI rate limits
+  - The system implements retry with backoff based on Retry-After headers
+  - Consider adding MaxRetries, MaxTokensPerMinute, and MaxRequestsPerMinute settings
 
 ### Azure Cosmos DB
 - Requires endpoint and API key.
@@ -104,7 +109,7 @@
 ### Common Issues
 
 #### "Failed to load Excel file"
-- Check if the file contains PivotTables (known issue with ClosedXML)
+- Check if the file contains PivotTables (now handled with SkipPivotTables option)
 - Verify the file is not corrupted or password-protected
 - Try opening and resaving the file in Excel
 
@@ -122,6 +127,12 @@
 - Verify that all API keys and endpoints are correctly configured.
 - Check Azure service status for any outages.
 - Ensure that rate limits have not been exceeded.
+
+#### "Rate limiting warnings in logs"
+- These warnings are normal when processing large datasets
+- The system implements retry with backoff based on Retry-After headers
+- Consider adding rate limiting configuration in appsettings.json
+- For large datasets, consider batch processing with delays
 
 #### Reflection Usage in TabularFilterHelper
 - The `TabularFilterHelper` uses reflection to access the internal `_memoryDb` field of `IKernelMemory`. This could break if the internal structure of `KernelMemory` changes in future versions. Consider alternatives if this becomes an issue.
