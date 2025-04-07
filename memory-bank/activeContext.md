@@ -58,21 +58,24 @@ The project is currently focused on implementing and testing the tabular data pr
 3. **Query Precision**: How to balance between natural language flexibility and query precision?
 4. **Data Type Preservation**: What's the best approach for handling complex data types in Excel files?
 5. **Helper Dependencies**: The `TabularFilterHelper` uses reflection to access internal Kernel Memory fields, which could break with future KM updates. Is there a more robust way to achieve this?
+6. **Schema Storage**: Should schema information be stored in a separate container or in the same container as the data? We've implemented the latter approach for simplicity and reduced resource usage.
 
 ### Current Challenges
 1. **Filter Accuracy**: The filter generation sometimes misinterprets field names or values in complex queries.
 2. **Excel Format Variations**: Different Excel formatting styles can affect the quality of data extraction.
 3. **Memory Usage**: Processing large Excel files can be memory-intensive.
 4. **Response Formatting**: Ensuring responses are well-formatted and user-friendly for tabular data queries.
+5. **Schema Management**: Identifying and retrieving schema information efficiently when stored in the same container as regular data.
 
 ## Integration Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Azure OpenAI | Implemented | Configured for both text and embedding generation |
-| Azure Cosmos DB | Implemented | Custom implementation for tabular data |
+| Azure Cosmos DB | Implemented | Custom implementation for tabular data with unified schema storage |
 | Azure Blob Storage | Implemented | Basic functionality for document ingestion |
 | Excel Processing | Implemented | Custom decoder for tabular data preservation |
 | Filter Generation | Implemented | AI-driven approach with room for improvement |
 | Query Processing | Implemented | Basic functionality with specialized formatting |
+| Schema Management | Implemented | Schema extraction, storage, and validation in the same container as data |
 | UI/API | Not Started | Planned for future development |

@@ -18,6 +18,7 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Structured data storage with field-level access
 - ✅ Basic filtering on data fields
 - ✅ Efficient indexing for tabular data
+- ✅ Schema management in the same container as data
 
 ### Query Processing
 - ✅ Natural language query handling
@@ -25,6 +26,7 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Structured query execution against Cosmos DB
 - ✅ Response formatting with source attribution
 - ✅ Basic error handling for query failures
+- ✅ Schema-based parameter validation
 
 ### Configuration and Setup
 - ✅ Configuration loading from appsettings.json
@@ -108,6 +110,7 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-03-25 | Basic document processing | Completed |
 | 2025-03-30 | Tabular data extraction | Completed |
 | 2025-04-05 | Filter generation implementation | Completed |
+| 2025-04-07 | Unified schema storage implementation | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
 | 2025-04-20 | Documentation and examples | Not Started |

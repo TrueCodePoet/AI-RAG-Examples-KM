@@ -67,11 +67,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         var databaseResponse = await this._cosmosClient
             .CreateDatabaseIfNotExistsAsync(this._databaseName, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        // Create schema container if schema management is enabled
-        if (this._config.EnableSchemaManagement)
-        {
-            await this.CreateSchemaContainerAsync(cancellationToken).ConfigureAwait(false);
-        }
+        // Schema information is now stored in the same container as the data
 
         var containerProperties = AzureCosmosDbTabularConfig.GetContainerProperties(index);
 
@@ -531,36 +527,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         return result;
     }
 
-    /// <summary>
-    /// Creates the schema container if it doesn't exist.
-    /// </summary>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    private async Task CreateSchemaContainerAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var containerProperties = AzureCosmosDbTabularConfig.GetContainerProperties(
-                this._config.SchemaContainerName, 
-                isSchemaContainer: true);
-
-            await this._cosmosClient
-                .GetDatabase(this._databaseName)
-                .CreateContainerIfNotExistsAsync(
-                    containerProperties,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            this._logger.LogInformation("Created/Ensured schema container {Container} in database {Database}",
-                this._config.SchemaContainerName, this._databaseName);
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogError(ex, "Error creating schema container {Container} in database {Database}",
-                this._config.SchemaContainerName, this._databaseName);
-            throw;
-        }
-    }
+    // CreateSchemaContainerAsync method removed as schemas are now stored in the same container as data
 
     /// <summary>
     /// Extracts schema information from a record and stores it.
@@ -689,7 +656,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     }
 
     /// <summary>
-    /// Stores a schema in the schema container.
+    /// Stores a schema in the index container.
     /// </summary>
     /// <param name="schema">The schema to store.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -705,20 +672,37 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
 
         try
         {
-            // Ensure schema container exists
-            await this.CreateSchemaContainerAsync(cancellationToken).ConfigureAwait(false);
+            // Add a special tag to identify this as a schema document
+            if (schema.Metadata == null)
+            {
+                schema.Metadata = new Dictionary<string, string>();
+            }
+            schema.Metadata["document_type"] = "schema";
+            
+            // Ensure the ID is prefixed to avoid collisions with regular documents
+            if (!schema.Id.StartsWith("schema_"))
+            {
+                schema.Id = $"schema_{schema.DatasetName}";
+            }
 
-            // Store schema
+            // Get all available indexes
+            var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+            
+            // If no indexes exist, create a default one
+            string indexName = indexes.Any() ? indexes.First() : "default";
+            
+            // Store schema in the index container
             var result = await this._cosmosClient
                 .GetDatabase(this._databaseName)
-                .GetContainer(this._config.SchemaContainerName)
+                .GetContainer(indexName)
                 .UpsertItemAsync(
                     schema,
                     new PartitionKey(schema.DatasetName),
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            this._logger.LogInformation("Stored schema for dataset {DatasetName}", schema.DatasetName);
+            this._logger.LogInformation("Stored schema for dataset {DatasetName} in container {Container}", 
+                schema.DatasetName, indexName);
             return result.Resource.Id;
         }
         catch (Exception ex)
@@ -729,7 +713,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     }
 
     /// <summary>
-    /// Gets a schema by dataset name.
+    /// Gets a schema by dataset name from any available index container.
     /// </summary>
     /// <param name="datasetName">The dataset name.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -745,20 +729,45 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
 
         try
         {
-            // Query for schema by dataset name
+            // Get all available indexes
+            var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+            
+            // If no indexes exist, return null
+            if (!indexes.Any())
+            {
+                return null;
+            }
+            
+            // Query for schema by dataset name and document_type
             var queryDefinition = new QueryDefinition(
-                "SELECT * FROM c WHERE c.datasetName = @datasetName")
+                "SELECT * FROM c WHERE c.datasetName = @datasetName AND c.metadata.document_type = 'schema'")
                 .WithParameter("@datasetName", datasetName);
 
-            using var feedIterator = this._cosmosClient
-                .GetDatabase(this._databaseName)
-                .GetContainer(this._config.SchemaContainerName)
-                .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
-
-            if (feedIterator.HasMoreResults)
+            // Try to find the schema in any of the available indexes
+            foreach (var index in indexes)
             {
-                var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
-                return response.FirstOrDefault();
+                try
+                {
+                    using var feedIterator = this._cosmosClient
+                        .GetDatabase(this._databaseName)
+                        .GetContainer(index)
+                        .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
+
+                    if (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                        var schema = response.FirstOrDefault();
+                        if (schema != null)
+                        {
+                            return schema;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogWarning(ex, "Error searching for schema in container {Container}", index);
+                    // Continue to the next container
+                }
             }
 
             return null;
@@ -771,7 +780,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     }
 
     /// <summary>
-    /// Lists all available schemas.
+    /// Lists all available schemas from all index containers.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A list of schemas.</returns>
@@ -787,18 +796,40 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
 
         try
         {
-            // Query for all schemas
-            var queryDefinition = new QueryDefinition("SELECT * FROM c");
-
-            using var feedIterator = this._cosmosClient
-                .GetDatabase(this._databaseName)
-                .GetContainer(this._config.SchemaContainerName)
-                .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
-
-            while (feedIterator.HasMoreResults)
+            // Get all available indexes
+            var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+            
+            // If no indexes exist, return empty list
+            if (!indexes.Any())
             {
-                var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
-                result.AddRange(response);
+                return result;
+            }
+            
+            // Query for all schema documents
+            var queryDefinition = new QueryDefinition(
+                "SELECT * FROM c WHERE c.metadata.document_type = 'schema'");
+
+            // Search in all available indexes
+            foreach (var index in indexes)
+            {
+                try
+                {
+                    using var feedIterator = this._cosmosClient
+                        .GetDatabase(this._databaseName)
+                        .GetContainer(index)
+                        .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
+
+                    while (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                        result.AddRange(response);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogWarning(ex, "Error listing schemas in container {Container}", index);
+                    // Continue to the next container
+                }
             }
         }
         catch (Exception ex)

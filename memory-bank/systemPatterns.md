@@ -96,11 +96,18 @@ flowchart TD
    - Preserves tabular structure in the database within a dedicated `Data` field.
    - Provides specialized query capabilities for structured data, including filtering on nested fields within `Data`.
    - Normalizes query filter keys targeting the `Data` field (e.g., `data.fieldName` becomes `data.field_name`) before executing the query, assuming snake_case keys in the stored data.
+   - Stores schema information in the same container as the data, using metadata tags to identify schema documents.
 
 2. **AzureCosmosDbTabularMemoryRecord**
    - Represents a record in the memory database
    - Contains both vector embeddings and structured data
    - Maintains relationships between fields
+   - Uses special metadata tags to distinguish between regular records and schema records
+
+3. **TabularDataSchema**
+   - Represents the schema for a tabular dataset
+   - Contains information about columns, data types, and common values
+   - Stored in the same container as the data with a "document_type" metadata tag
 
 ### Data Processing Components
 

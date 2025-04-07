@@ -33,9 +33,9 @@ public sealed class AzureCosmosDbTabularConfig
     public bool EnableSchemaManagement { get; init; } = true;
 
     /// <summary>
-    /// Name of the container to use for schema storage. Defaults to "schemas".
+    /// Name of the container to use for schema storage. Set to empty string to store schemas in the same container as data.
     /// </summary>
-    public string SchemaContainerName { get; init; } = "schemas";
+    public string SchemaContainerName { get; init; } = string.Empty;
 
     /// <summary>
     /// Whether to extract schema information during document processing. Defaults to true.

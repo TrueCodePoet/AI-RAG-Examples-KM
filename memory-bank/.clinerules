@@ -37,6 +37,7 @@
 - Headers are normalized to remove special characters
 - Each row becomes a separate memory record with preserved structure in the `Data` field.
 - Text representation follows the format "Record from worksheet X, row Y: Column1 is Value1. Column2 is Value2." This specific format is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the `Data` and `Source` fields; changes require synchronization between the decoder and the record class.
+- Schema information is extracted during import and stored in the same container as the data, with special metadata tags to identify schema documents.
 
 ### Filter Generation
 - Natural language queries are analyzed to extract structured filters
@@ -62,6 +63,7 @@
 - Requires endpoint and API key.
 - Default database name is "memory" if not specified via `AzureCosmosDbTabularConfig`.
 - **Indexing:** For the `AzureCosmosDbTabular` extension, the container indexing policy *must* include the `/data/*` path to enable filtering on structured fields. The `/embedding/*` path should generally be excluded from standard indexing.
+- **Schema Storage:** Schema information is stored in the same container as the data, using a "document_type" metadata tag to identify schema documents. This approach simplifies the architecture and reduces the number of containers needed.
 
 ### Azure Blob Storage
 - Configured with container URL and optional SAS token
