@@ -687,8 +687,8 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 schema.Id = $"schema_{schema.DatasetName}";
             }
             
-            // Set the partition key to match the dataset name
-            schema.PartitionKey = schema.DatasetName;
+            // Set the file property to match the dataset name (used as partition key)
+            schema.File = schema.DatasetName;
 
             // Determine which container to use for schema storage
             string containerName;
@@ -725,7 +725,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 .GetContainer(containerName)
                 .UpsertItemAsync(
                     schema,
-                    new PartitionKey(schema.DatasetName),
+                    schema.GetPartitionKey(),
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 

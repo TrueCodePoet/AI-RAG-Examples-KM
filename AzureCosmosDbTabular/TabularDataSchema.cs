@@ -48,11 +48,17 @@ public class TabularDataSchema
     public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
     
     /// <summary>
-    /// Gets or sets the partition key for the schema.
-    /// This is used to ensure the schema is stored with the correct partition key in Cosmos DB.
+    /// Gets or sets the file identifier (used as partition key).
+    /// This must match the partition key field name used in AzureCosmosDbTabularMemoryRecord.
     /// </summary>
-    [JsonPropertyName("partitionKey")]
-    public string PartitionKey { get; set; } = string.Empty;
+    [JsonPropertyName("file")]
+    public string File { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Gets the partition key for this schema.
+    /// </summary>
+    /// <returns>The partition key.</returns>
+    internal Microsoft.Azure.Cosmos.PartitionKey GetPartitionKey() => new(File);
 }
 
 /// <summary>
