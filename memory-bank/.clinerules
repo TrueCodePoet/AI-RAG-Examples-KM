@@ -123,6 +123,11 @@
 - Verify that the filter generation prompt is properly formatted
 - Look for complex or ambiguous field names in the query
 
+#### "Type compatibility issues"
+- When extending the TabularExcelDecoder, be aware of accessibility conflicts between internal and public types
+- Use object parameters with casting for public methods that need to work with internal types
+- Avoid exposing internal types in public method signatures
+
 #### "Azure service errors"
 - Verify that all API keys and endpoints are correctly configured.
 - Check Azure service status for any outages.

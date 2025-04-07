@@ -124,6 +124,7 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-05 | Filter generation implementation | Completed |
 | 2025-04-07 | Unified schema storage implementation | Completed |
 | 2025-04-07 | PivotTable error handling | Completed |
+| 2025-04-07 | Fixed TabularExcelDecoder type compatibility issues | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
 | 2025-04-20 | Documentation and examples | In Progress |
