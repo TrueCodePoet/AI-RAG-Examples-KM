@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
 using Microsoft.Extensions.Logging;
+using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.DataFormats;
 using Microsoft.KernelMemory.Diagnostics;
 using Microsoft.KernelMemory.Pipeline;
@@ -62,15 +63,20 @@ public sealed class TabularExcelDecoder : IContentDecoder
     /// </summary>
     /// <param name="config">The configuration.</param>
     /// <param name="datasetName">The dataset name.</param>
+    /// <param name="memory">Optional memory instance for schema extraction.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <returns>A new TabularExcelDecoder instance.</returns>
     public static IContentDecoder CreateWithDatasetName(
         TabularExcelDecoderConfig config, 
         string datasetName,
+        object? memory = null,
         ILoggerFactory? loggerFactory = null)
     {
-        // Create a new instance
-        var decoder = new TabularExcelDecoder(config, null, loggerFactory);
+        // Create a new instance with the memory parameter
+        var decoder = new TabularExcelDecoder(
+            config, 
+            memory as AzureCosmosDbTabularMemory, 
+            loggerFactory);
         
         // Set the dataset name
         if (!string.IsNullOrEmpty(datasetName))
