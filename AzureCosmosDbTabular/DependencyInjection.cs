@@ -127,11 +127,18 @@ public static class DependencyInjection
         var config = new TabularExcelDecoderConfig();
         configure?.Invoke(config);
 
-        // Create the decoder with dataset name
-        var decoder = (TabularExcelDecoder)TabularExcelDecoder.CreateWithDatasetName(config, datasetName);
-        
-        // Register the decoder
-        builder.Services.AddSingleton<IContentDecoder>(decoder);
+        // Register a factory method to create the decoder with the memory instance
+        builder.Services.AddSingleton<IContentDecoder>(serviceProvider =>
+        {
+            // Get the memory instance from the service provider
+            var memory = serviceProvider.GetService<IMemoryDb>() as AzureCosmosDbTabularMemory;
+            
+            // Create the decoder with dataset name and memory instance
+            var decoder = new TabularExcelDecoder(config, memory, serviceProvider.GetService<ILoggerFactory>());
+            decoder.WithDatasetName(datasetName);
+            
+            return decoder;
+        });
 
         return builder;
     }

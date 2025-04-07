@@ -575,8 +575,8 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 schema.Columns.Add(column);
             }
 
-            // Store schema
-            await this.StoreSchemaAsync(schema, cancellationToken).ConfigureAwait(false);
+            // Store schema - pass the index name as null to use the default container selection logic
+            await this.StoreSchemaAsync(schema, null, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -651,7 +651,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         if (schemaChanged)
         {
             schema.ImportDate = DateTime.UtcNow; // Update timestamp
-            await this.StoreSchemaAsync(schema, cancellationToken).ConfigureAwait(false);
+            await this.StoreSchemaAsync(schema, null, cancellationToken).ConfigureAwait(false);
         }
     }
 
