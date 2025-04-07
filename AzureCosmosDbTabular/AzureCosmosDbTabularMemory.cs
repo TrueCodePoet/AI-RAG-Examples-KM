@@ -656,13 +656,15 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     }
 
     /// <summary>
-    /// Stores a schema in the index container.
+    /// Stores a schema in the appropriate container.
     /// </summary>
     /// <param name="schema">The schema to store.</param>
+    /// <param name="indexName">Optional specific index name to use for storage. If not provided, will use configuration settings.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The schema ID.</returns>
     public async Task<string> StoreSchemaAsync(
         TabularDataSchema schema,
+        string? indexName = null,
         CancellationToken cancellationToken = default)
     {
         if (!this._config.EnableSchemaManagement)
@@ -685,16 +687,39 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 schema.Id = $"schema_{schema.DatasetName}";
             }
 
-            // Get all available indexes
-            var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+            // Determine which container to use for schema storage
+            string containerName;
             
-            // If no indexes exist, create a default one
-            string indexName = indexes.Any() ? indexes.First() : "default";
+            if (!string.IsNullOrEmpty(indexName))
+            {
+                // Use the explicitly provided index name
+                containerName = indexName;
+            }
+            else if (!string.IsNullOrEmpty(this._config.SchemaContainerName))
+            {
+                // Use the dedicated schema container from config
+                containerName = this._config.SchemaContainerName;
+                
+                // Ensure the container exists
+                await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                // Use the first available index or create a default one
+                var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+                containerName = indexes.Any() ? indexes.First() : "default";
+                
+                // Ensure the container exists
+                if (!indexes.Any())
+                {
+                    await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
+                }
+            }
             
-            // Store schema in the index container
+            // Store schema in the determined container
             var result = await this._cosmosClient
                 .GetDatabase(this._databaseName)
-                .GetContainer(indexName)
+                .GetContainer(containerName)
                 .UpsertItemAsync(
                     schema,
                     new PartitionKey(schema.DatasetName),
@@ -702,7 +727,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 .ConfigureAwait(false);
 
             this._logger.LogInformation("Stored schema for dataset {DatasetName} in container {Container}", 
-                schema.DatasetName, indexName);
+                schema.DatasetName, containerName);
             return result.Resource.Id;
         }
         catch (Exception ex)

@@ -186,8 +186,19 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     var schema = ExtractSchemaFromWorkbook(workbook, this._datasetName);
                     if (schema != null)
                     {
+                        // Get the index name from the current operation context if available
+                        string? indexName = null;
+                        
+                        // Try to extract index name from the pipeline context if available
+                        // This ensures schema is stored in the same container as the data
+                        if (cancellationToken.GetType().GetProperty("IndexName")?.GetValue(cancellationToken) is string ctxIndexName)
+                        {
+                            indexName = ctxIndexName;
+                            this._log.LogDebug("Using index name '{IndexName}' from context for schema storage", indexName);
+                        }
+                        
                         // Store schema asynchronously but don't await it to avoid blocking
-                        _ = this._memory.StoreSchemaAsync(schema, cancellationToken)
+                        _ = this._memory.StoreSchemaAsync(schema, indexName, cancellationToken)
                             .ContinueWith(t => 
                             {
                                 if (t.IsFaulted)
