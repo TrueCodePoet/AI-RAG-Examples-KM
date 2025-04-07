@@ -8,6 +8,12 @@
 - Specialized implementations are in subdirectories (AzureCosmosDb, AzureCosmosDbTabular)
 - Configuration is centralized in appsettings.json and loaded via KernelSetup.cs
 
+### Dependency Injection
+- Services are registered in the DependencyInjection.cs file
+- Both interfaces and concrete implementations are registered when needed for direct resolution
+- Factory patterns are used for components that require runtime configuration
+- When a component needs a specific implementation (not just an interface), register the concrete type and use GetService<ConcreteType>() first, then fall back to casting from the interface
+
 ### Naming Conventions
 - Class names are descriptive and follow PascalCase (e.g., BlobStorageProcessor)
 - Interface names start with "I" (e.g., IContentDecoder)
@@ -117,6 +123,7 @@
 - Verify that the memory instance is properly initialized
 - Check that the correct memory implementation is being used
 - Ensure the configuration is properly loaded
+- For TabularExcelDecoder, ensure the AzureCosmosDbTabularMemory instance is properly resolved in dependency injection
 
 #### "Filter generation error"
 - Check the format of the query

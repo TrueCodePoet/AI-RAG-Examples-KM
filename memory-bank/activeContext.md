@@ -70,6 +70,7 @@ The project is currently focused on implementing and testing the tabular data pr
 5. **Rate Limiting**: Azure OpenAI rate limits can slow down processing of large datasets.
 6. **Excel PivotTable Handling**: Excel files with PivotTables can cause processing errors, now addressed with improved error detection and handling.
 7. **Type Compatibility**: Fixed issues with TabularExcelDecoder where internal/public type accessibility conflicts prevented proper schema extraction.
+8. **Schema Storage**: Fixed issue where TabularExcelDecoder's `_memory` field was null, preventing schema from being saved. The dependency injection now properly resolves the AzureCosmosDbTabularMemory instance.
 
 ## Rate Limiting Considerations
 

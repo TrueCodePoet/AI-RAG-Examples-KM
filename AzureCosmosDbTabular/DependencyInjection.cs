@@ -85,7 +85,10 @@ public static class DependencyInjection
         // Register the memory DB implementation
         builder.Services.AddSingleton(cosmosClient);
         builder.Services.AddSingleton(config);
-        builder.Services.AddSingleton<IMemoryDb, AzureCosmosDbTabularMemory>();
+        
+        // Register as both the interface and the concrete type
+        builder.Services.AddSingleton<AzureCosmosDbTabularMemory>();
+        builder.Services.AddSingleton<IMemoryDb>(sp => sp.GetRequiredService<AzureCosmosDbTabularMemory>());
         
         // Register the TabularFilterHelper
         builder.Services.AddSingleton<TabularFilterHelper>();
@@ -130,11 +133,39 @@ public static class DependencyInjection
         // Register the decoder factory
         builder.Services.AddSingleton<IContentDecoder>(serviceProvider =>
         {
-            // Get the memory instance from the service provider
-            var memory = serviceProvider.GetService<IMemoryDb>();
+            // Get logger for diagnostic information
+            var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+            var logger = loggerFactory?.CreateLogger("TabularExcelDecoderRegistration");
             
-            // Create the decoder with the memory instance
-            return TabularExcelDecoder.CreateWithDatasetName(config, datasetName, memory, serviceProvider.GetService<ILoggerFactory>());
+            // First try to get the concrete type directly
+            var memory = serviceProvider.GetService<AzureCosmosDbTabularMemory>();
+            
+            // If not found, try to get via interface and cast
+            if (memory == null)
+            {
+                var memoryDb = serviceProvider.GetService<IMemoryDb>();
+                memory = memoryDb as AzureCosmosDbTabularMemory;
+                
+                if (memory == null)
+                {
+                    logger?.LogWarning(
+                        "Failed to get AzureCosmosDbTabularMemory instance. Schema extraction will be disabled. " +
+                        "IMemoryDb implementation: {MemoryDbType}", 
+                        memoryDb?.GetType().FullName ?? "null");
+                }
+                else
+                {
+                    logger?.LogInformation(
+                        "Successfully obtained AzureCosmosDbTabularMemory instance via IMemoryDb");
+                }
+            }
+            else
+            {
+                logger?.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance directly");
+            }
+            
+            // Create the decoder with the memory instance (may be null)
+            return TabularExcelDecoder.CreateWithDatasetName(config, datasetName, memory, loggerFactory);
         });
 
         return builder;
