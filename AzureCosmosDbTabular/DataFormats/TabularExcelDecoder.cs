@@ -125,27 +125,55 @@ public sealed class TabularExcelDecoder : IContentDecoder
 
         try
         {
-            // Attempt to load the workbook
-            workbook = new XLWorkbook(data);
+            // Create a memory stream to make a copy of the data
+            // This allows us to rewind and try different approaches if needed
+            using var memoryStream = new MemoryStream();
+            data.CopyTo(memoryStream);
+            memoryStream.Position = 0;
+
+            try
+            {
+                // First attempt: Try to load with default options
+                workbook = new XLWorkbook(memoryStream);
+            }
+            catch (Exception ex)
+            {
+                // Enhanced detection for PivotTable and XML structure issues
+                bool isPivotTableIssue = 
+                    // Check stack trace for PivotTable references
+                    ex.StackTrace?.Contains("PivotTableCacheDefinitionPartReader", StringComparison.Ordinal) == true ||
+                    ex.InnerException?.StackTrace?.Contains("PivotTableCacheDefinitionPartReader", StringComparison.Ordinal) == true ||
+                    // Check message for XML structure issues
+                    ex.Message.Contains("element structure in XML", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("PartStructureException", StringComparison.OrdinalIgnoreCase) ||
+                    // Check exception type
+                    ex.GetType().Name.Contains("PartStructureException") ||
+                    ex.InnerException?.GetType().Name.Contains("PartStructureException") == true;
+
+                if (isPivotTableIssue && this._config.SkipPivotTables)
+                {
+                    // Log warning but don't throw exception
+                    this._log.LogWarning("Failed to load Excel file, likely due to a PivotTable structure issue. Skipping this file. Error: {ErrorMessage}", ex.Message);
+                    
+                    // Add a note to the result to indicate the file was skipped
+                    result.Sections.Add(new Chunk("This Excel file could not be processed due to PivotTable or XML structure issues.", 1, 
+                        new Dictionary<string, string> { ["processing_error"] = "PivotTable structure issue" }));
+                    
+                    return Task.FromResult(result); // Return result with error note
+                }
+                else
+                {
+                    // Log other potential loading errors and rethrow
+                    this._log.LogError(ex, "Failed to load Excel file: {ErrorMessage}", ex.Message);
+                    throw;
+                }
+            }
         }
         catch (Exception ex)
         {
-            // Check if the exception seems related to ClosedXML PivotTable reading based on stack trace or message
-            bool isPivotTableIssue = ex.StackTrace?.Contains("PivotTableCacheDefinitionPartReader", StringComparison.Ordinal) == true ||
-                                     ex.InnerException?.StackTrace?.Contains("PivotTableCacheDefinitionPartReader", StringComparison.Ordinal) == true ||
-                                     ex.Message.Contains("element structure in XML", StringComparison.OrdinalIgnoreCase); // Check specific message part
-
-            if (isPivotTableIssue)
-            {
-                this._log.LogWarning(ex, "Failed to load Excel file, likely due to a PivotTable structure issue. Skipping this file.");
-                return Task.FromResult(result); // Return empty result to skip gracefully
-            }
-            else
-            {
-                // Log other potential loading errors and rethrow
-                this._log.LogError(ex, "Failed to load Excel file.");
-                throw;
-            }
+            // Catch any other exceptions that might occur during stream handling
+            this._log.LogError(ex, "Error processing Excel file stream: {ErrorMessage}", ex.Message);
+            throw;
         }
 
         using (workbook) // Ensure disposal if workbook was loaded successfully

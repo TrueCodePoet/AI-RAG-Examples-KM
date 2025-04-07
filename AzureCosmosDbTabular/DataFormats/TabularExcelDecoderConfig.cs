@@ -12,6 +12,13 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.DataFormats;
 public class TabularExcelDecoderConfig
 {
     /// <summary>
+    /// Gets or sets a value indicating whether to skip PivotTable processing.
+    /// When true, files with PivotTables will be processed with PivotTable data ignored.
+    /// When false, files with PivotTables may cause exceptions.
+    /// </summary>
+    public bool SkipPivotTables { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets a value indicating whether to use the first row as header.
     /// </summary>
     public bool UseFirstRowAsHeader { get; set; } = true;
