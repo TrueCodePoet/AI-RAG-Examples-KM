@@ -168,7 +168,7 @@ internal class AzureCosmosDbTabularMemoryRecord
             memoryRecord.Payload["source_info"] = JsonSerializer.Serialize(Source, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
         }
 
-        // Add schema ID and import batch ID to the payload if they exist
+        // Add schema ID and import batch ID to the payload
         if (!string.IsNullOrEmpty(this.SchemaId))
         {
             memoryRecord.Payload["schema_id"] = this.SchemaId;

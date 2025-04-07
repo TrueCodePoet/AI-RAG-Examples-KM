@@ -191,6 +191,23 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         // Variables to store schema ID and import batch ID
         string schemaId = string.Empty;
         string importBatchId = string.Empty;
+        
+        // Check for schema ID and import batch ID in the record's payload
+        if (record.Payload.TryGetValue("schema_id", out var schemaIdValue) && 
+            schemaIdValue is string schemaIdStr && 
+            !string.IsNullOrEmpty(schemaIdStr))
+        {
+            schemaId = schemaIdStr;
+            this._logger.LogDebug("Found schema ID {SchemaId} in record payload", schemaId);
+        }
+        
+        if (record.Payload.TryGetValue("import_batch_id", out var importBatchIdValue) && 
+            importBatchIdValue is string importBatchIdStr && 
+            !string.IsNullOrEmpty(importBatchIdStr))
+        {
+            importBatchId = importBatchIdStr;
+            this._logger.LogDebug("Found import batch ID {ImportBatchId} in record payload", importBatchId);
+        }
 
         // Extract tabular data from the record
         Dictionary<string, object> tabularData = new();

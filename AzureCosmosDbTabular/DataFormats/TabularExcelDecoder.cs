@@ -131,21 +131,21 @@ public sealed class TabularExcelDecoder : IContentDecoder
     }
 
     /// <inheritdoc />
-    public Task<FileContent> DecodeAsync(string filename, CancellationToken cancellationToken = default)
+    public async Task<FileContent> DecodeAsync(string filename, CancellationToken cancellationToken = default)
     {
         using var stream = File.OpenRead(filename);
-        return this.DecodeAsync(stream, cancellationToken);
+        return await this.DecodeAsync(stream, cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<FileContent> DecodeAsync(BinaryData data, CancellationToken cancellationToken = default)
+    public async Task<FileContent> DecodeAsync(BinaryData data, CancellationToken cancellationToken = default)
     {
         using var stream = data.ToStream();
-        return this.DecodeAsync(stream, cancellationToken);
+        return await this.DecodeAsync(stream, cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<FileContent> DecodeAsync(Stream data, CancellationToken cancellationToken = default)
+    public async Task<FileContent> DecodeAsync(Stream data, CancellationToken cancellationToken = default)
     {
         this._log.LogDebug("Extracting tabular data from MS Excel file");
 
@@ -188,7 +188,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     result.Sections.Add(new Chunk("This Excel file could not be processed due to PivotTable or XML structure issues.", 1, 
                         new Dictionary<string, string> { ["processing_error"] = "PivotTable structure issue" }));
                     
-                    return Task.FromResult(result); // Return result with error note
+                    return result; // Return result with error note
                 }
                 else
                 {
@@ -207,41 +207,52 @@ public sealed class TabularExcelDecoder : IContentDecoder
 
         using (workbook) // Ensure disposal if workbook was loaded successfully
         {
-            // Extract schema if memory is provided and dataset name is set
-            if (this._memory != null && !string.IsNullOrEmpty(this._datasetName))
-            {
-                try
-                {
-                    var schema = ExtractSchemaFromWorkbook(workbook, this._datasetName);
-                    if (schema != null)
+                    // Variables to store schema ID and import batch ID
+                    string schemaId = string.Empty;
+                    string importBatchId = string.Empty;
+                    
+                    // Extract schema if memory is provided and dataset name is set
+                    if (this._memory != null && !string.IsNullOrEmpty(this._datasetName))
                     {
-                        // Get the index name from the current operation context if available
-                        string? indexName = null;
-                        
-                        // Try to extract index name from the pipeline context if available
-                        // This ensures schema is stored in the same container as the data
-                        if (cancellationToken.GetType().GetProperty("IndexName")?.GetValue(cancellationToken) is string ctxIndexName)
+                        try
                         {
-                            indexName = ctxIndexName;
-                            this._log.LogDebug("Using index name '{IndexName}' from context for schema storage", indexName);
-                        }
-                        
-                        // Store schema asynchronously but don't await it to avoid blocking
-                        _ = this._memory.StoreSchemaAsync(schema, indexName, cancellationToken)
-                            .ContinueWith(t => 
+                            var schema = ExtractSchemaFromWorkbook(workbook, this._datasetName);
+                            if (schema != null)
                             {
-                                if (t.IsFaulted)
+                                // Get the index name from the current operation context if available
+                                string? indexName = null;
+                                
+                                // Try to extract index name from the pipeline context if available
+                                // This ensures schema is stored in the same container as the data
+                                if (cancellationToken.GetType().GetProperty("IndexName")?.GetValue(cancellationToken) is string ctxIndexName)
                                 {
-                                    this._log.LogError(t.Exception, "Error storing schema for dataset {DatasetName}", this._datasetName);
+                                    indexName = ctxIndexName;
+                                    this._log.LogDebug("Using index name '{IndexName}' from context for schema storage", indexName);
                                 }
-                            }, TaskScheduler.Current);
+                                
+                                // Store schema and get its ID
+                                try
+                                {
+                                    var storedSchemaId = await this._memory.StoreSchemaAsync(schema, indexName, cancellationToken).ConfigureAwait(false);
+                                    if (!string.IsNullOrEmpty(storedSchemaId))
+                                    {
+                                        schemaId = storedSchemaId;
+                                        importBatchId = schema.ImportBatchId;
+                                        this._log.LogInformation("Stored schema with ID {SchemaId} and import batch ID {ImportBatchId} for dataset {DatasetName}", 
+                                            schemaId, importBatchId, this._datasetName);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    this._log.LogError(ex, "Error storing schema for dataset {DatasetName}", this._datasetName);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            this._log.LogError(ex, "Error extracting schema from Excel file for dataset {DatasetName}", this._datasetName);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    this._log.LogError(ex, "Error extracting schema from Excel file for dataset {DatasetName}", this._datasetName);
-                }
-            }
 
             var chunkNumber = 0;
             foreach (var worksheet in workbook.Worksheets)
@@ -369,6 +380,17 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     {
                         metadata["dataset_name"] = this._datasetName;
                     }
+                    
+                    // Add schema ID and import batch ID if available
+                    if (!string.IsNullOrEmpty(schemaId))
+                    {
+                        metadata["schema_id"] = schemaId;
+                    }
+                    
+                    if (!string.IsNullOrEmpty(importBatchId))
+                    {
+                        metadata["import_batch_id"] = importBatchId;
+                    }
 
                     // Create a more descriptive text representation for the chunk content
                     var sb = new StringBuilder();
@@ -387,7 +409,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
             }
         } // End using workbook
 
-        return Task.FromResult(result);
+        return result;
     }
 
     /// <summary>

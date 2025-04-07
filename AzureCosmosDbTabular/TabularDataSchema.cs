@@ -85,9 +85,12 @@ public class TabularDataSchema
         string effectiveDatasetName = datasetName;
         if (string.IsNullOrEmpty(effectiveDatasetName) || 
             effectiveDatasetName.Equals("default", StringComparison.OrdinalIgnoreCase) ||
-            effectiveDatasetName.Equals("tabular", StringComparison.OrdinalIgnoreCase))
+            effectiveDatasetName.Equals("tabular", StringComparison.OrdinalIgnoreCase) ||
+            effectiveDatasetName.Contains("index", StringComparison.OrdinalIgnoreCase) ||
+            (effectiveDatasetName.Length > 20 && effectiveDatasetName.Contains("-")))
         {
-            effectiveDatasetName = sourceFileName;
+            effectiveDatasetName = Path.GetFileNameWithoutExtension(sourceFileName);
+            Console.WriteLine($"Using source file name '{effectiveDatasetName}' instead of generic dataset name '{datasetName}'");
         }
         
         return new TabularDataSchema
