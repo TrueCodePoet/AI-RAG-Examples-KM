@@ -46,6 +46,13 @@ public class TabularDataSchema
     /// </summary>
     [JsonPropertyName("metadata")]
     public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+    
+    /// <summary>
+    /// Gets or sets the partition key for the schema.
+    /// This is used to ensure the schema is stored with the correct partition key in Cosmos DB.
+    /// </summary>
+    [JsonPropertyName("partitionKey")]
+    public string PartitionKey { get; set; } = string.Empty;
 }
 
 /// <summary>

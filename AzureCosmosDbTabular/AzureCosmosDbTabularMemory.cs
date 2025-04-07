@@ -686,6 +686,9 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             {
                 schema.Id = $"schema_{schema.DatasetName}";
             }
+            
+            // Set the partition key to match the dataset name
+            schema.PartitionKey = schema.DatasetName;
 
             // Determine which container to use for schema storage
             string containerName;
