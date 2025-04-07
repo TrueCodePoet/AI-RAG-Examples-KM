@@ -366,6 +366,19 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         rowData[columnName] = cellValue;
                     }
 
+                    // Add schema ID and import batch ID if available - ensure they're in the payload
+                    if (!string.IsNullOrEmpty(schemaId))
+                    {
+                        // Add to the row data to ensure it gets into the payload
+                        rowData["schema_id"] = schemaId;
+                    }
+                    
+                    if (!string.IsNullOrEmpty(importBatchId))
+                    {
+                        // Add to the row data to ensure it gets into the payload
+                        rowData["import_batch_id"] = importBatchId;
+                    }
+
                     // Create a chunk for this row
                     chunkNumber++;
                     var metadata = new Dictionary<string, string>
@@ -381,7 +394,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         metadata["dataset_name"] = this._datasetName;
                     }
                     
-                    // Add schema ID and import batch ID if available
+                    // Add schema ID and import batch ID to metadata as well
                     if (!string.IsNullOrEmpty(schemaId))
                     {
                         metadata["schema_id"] = schemaId;
