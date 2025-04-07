@@ -102,14 +102,14 @@ internal class AzureCosmosDbTabularMemoryRecord
     /// Gets or sets the schema identifier that this record belongs to.
     /// </summary>
     [JsonPropertyName(SchemaIdField)]
-    public string SchemaId { get; init; } = string.Empty;
+    public string SchemaId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the import batch identifier.
     /// This is used to group all rows from the same import operation.
     /// </summary>
     [JsonPropertyName(ImportBatchIdField)]
-    public string ImportBatchId { get; init; } = string.Empty;
+    public string ImportBatchId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets the partition key for this record.

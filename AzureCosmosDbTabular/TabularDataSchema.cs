@@ -99,7 +99,7 @@ public class TabularDataSchema
             DatasetName = effectiveDatasetName,
             SourceFile = sourceFile,
             ImportDate = DateTime.UtcNow,
-            File = effectiveDatasetName, // Partition key is still the dataset name for efficient querying
+            File = sourceFile, // Use source file name as partition key for better traceability
             ImportBatchId = Guid.NewGuid().ToString()
         };
     }

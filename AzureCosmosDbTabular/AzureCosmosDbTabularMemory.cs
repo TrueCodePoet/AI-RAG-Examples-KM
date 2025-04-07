@@ -252,10 +252,19 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             schemaId: schemaId, 
             importBatchId: importBatchId);
             
-        // Ensure the import batch ID is set in the record's payload
-        if (!string.IsNullOrEmpty(importBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
+        // Ensure the schema ID and import batch ID are set in the record's payload and properties
+        if (!string.IsNullOrEmpty(schemaId))
         {
+            memoryRecord.SchemaId = schemaId;
+            memoryRecord.Payload["schema_id"] = schemaId;
+            Console.WriteLine($"Setting schema ID in record: {schemaId}");
+        }
+        
+        if (!string.IsNullOrEmpty(importBatchId))
+        {
+            memoryRecord.ImportBatchId = importBatchId;
             memoryRecord.Payload["import_batch_id"] = importBatchId;
+            Console.WriteLine($"Setting import batch ID in record: {importBatchId}");
         }
 
         var result = await this._cosmosClient
@@ -848,9 +857,13 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             // We no longer overwrite the ID with a generic one based on dataset name
             // This preserves the unique ID generated in TabularDataSchema.Create()
             
-            // Set the file property to match the dataset name (used as partition key)
-            // This allows efficient querying by dataset name while maintaining unique IDs
-            schema.File = schema.DatasetName;
+            // Set the file property to match the source file name (used as partition key)
+            // This allows efficient querying by source file while maintaining unique IDs
+            if (string.IsNullOrEmpty(schema.File))
+            {
+                schema.File = schema.SourceFile;
+                Console.WriteLine($"Setting schema File property to source file: {schema.SourceFile}");
+            }
 
             // Determine which container to use for schema storage
             string containerName;
