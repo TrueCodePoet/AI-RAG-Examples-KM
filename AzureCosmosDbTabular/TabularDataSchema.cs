@@ -77,15 +77,26 @@ public class TabularDataSchema
     public static TabularDataSchema Create(string datasetName, string sourceFile)
     {
         string timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-        string uniqueId = $"schema_{Path.GetFileNameWithoutExtension(sourceFile)}_{timestamp}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+        string sourceFileName = Path.GetFileNameWithoutExtension(sourceFile);
+        string uniqueId = $"schema_{sourceFileName}_{timestamp}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+        
+        // If datasetName is just the index name (e.g., "default"), use the source file name instead
+        // This makes the dataset name more meaningful
+        string effectiveDatasetName = datasetName;
+        if (string.IsNullOrEmpty(effectiveDatasetName) || 
+            effectiveDatasetName.Equals("default", StringComparison.OrdinalIgnoreCase) ||
+            effectiveDatasetName.Equals("tabular", StringComparison.OrdinalIgnoreCase))
+        {
+            effectiveDatasetName = sourceFileName;
+        }
         
         return new TabularDataSchema
         {
             Id = uniqueId,
-            DatasetName = datasetName,
+            DatasetName = effectiveDatasetName,
             SourceFile = sourceFile,
             ImportDate = DateTime.UtcNow,
-            File = datasetName, // Partition key is still the dataset name for efficient querying
+            File = effectiveDatasetName, // Partition key is still the dataset name for efficient querying
             ImportBatchId = Guid.NewGuid().ToString()
         };
     }

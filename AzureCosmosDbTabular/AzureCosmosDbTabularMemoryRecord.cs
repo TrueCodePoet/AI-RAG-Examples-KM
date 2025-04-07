@@ -256,7 +256,7 @@ internal class AzureCosmosDbTabularMemoryRecord
         {
             Id = id,
             File = fileId,
-            Payload = record.Payload,
+            Payload = new Dictionary<string, object>(record.Payload), // Create a copy to allow modification
             Tags = record.Tags,
             // Vector assignment remains unchanged
             Vector = record.Vector.Data.ToArray(),
@@ -266,6 +266,17 @@ internal class AzureCosmosDbTabularMemoryRecord
             SchemaId = schemaId ?? extractedSchemaId ?? string.Empty,
             ImportBatchId = importBatchId ?? extractedImportBatchId ?? string.Empty
         };
+        
+        // Ensure schema ID and import batch ID are also in the payload
+        if (!string.IsNullOrEmpty(memoryRecord.SchemaId) && !memoryRecord.Payload.ContainsKey("schema_id"))
+        {
+            memoryRecord.Payload["schema_id"] = memoryRecord.SchemaId;
+        }
+        
+        if (!string.IsNullOrEmpty(memoryRecord.ImportBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
+        {
+            memoryRecord.Payload["import_batch_id"] = memoryRecord.ImportBatchId;
+        }
 
         return memoryRecord;
     }

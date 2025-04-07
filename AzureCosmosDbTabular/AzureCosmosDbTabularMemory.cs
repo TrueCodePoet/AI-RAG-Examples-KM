@@ -215,20 +215,31 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             !string.IsNullOrEmpty(datasetName) && 
             tabularData.Count > 0)
         {
-            // Create or update schema and get its ID and import batch ID
+        // Create or update schema and get its ID and import batch ID
             (schemaId, importBatchId) = await this.CreateOrUpdateSchemaAsync(
                 datasetName, 
                 sourceFileName, 
                 tabularData, 
                 index, 
                 cancellationToken).ConfigureAwait(false);
+            
+            // Log the schema ID and import batch ID for debugging
+            this._logger.LogDebug("Created/updated schema with ID {SchemaId} and import batch ID {ImportBatchId}", 
+                schemaId, importBatchId);
         }
 
         // Create the Cosmos DB record from the memory record, including schema ID and import batch ID
         var memoryRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(
             record, 
+            data: tabularData,
             schemaId: schemaId, 
             importBatchId: importBatchId);
+            
+        // Ensure the import batch ID is set in the record's payload
+        if (!string.IsNullOrEmpty(importBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
+        {
+            memoryRecord.Payload["import_batch_id"] = importBatchId;
+        }
 
         var result = await this._cosmosClient
             .GetDatabase(this._databaseName)
