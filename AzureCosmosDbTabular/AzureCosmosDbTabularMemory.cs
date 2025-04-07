@@ -2,18 +2,19 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel; // Added for Collection<Embedding>
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using Microsoft.KernelMemory;
-using Microsoft.KernelMemory.AI; // Added back necessary using directive
+using Microsoft.KernelMemory.AI;
 using Microsoft.KernelMemory.MemoryStorage;
 
 namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
@@ -37,6 +38,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     private readonly CosmosClient _cosmosClient;
     private readonly ITextEmbeddingGenerator _embeddingGenerator;
     private readonly ILogger _logger;
+    private readonly AzureCosmosDbTabularConfig _config;
     private readonly string _databaseName;
 
     /// <summary>
@@ -55,6 +57,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         this._cosmosClient = cosmosClient;
         this._embeddingGenerator = embeddingGenerator;
         this._logger = logger;
+        this._config = config;
         this._databaseName = config.DatabaseName;
     }
 
@@ -63,6 +66,12 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     {
         var databaseResponse = await this._cosmosClient
             .CreateDatabaseIfNotExistsAsync(this._databaseName, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        // Create schema container if schema management is enabled
+        if (this._config.EnableSchemaManagement)
+        {
+            await this.CreateSchemaContainerAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         var containerProperties = AzureCosmosDbTabularConfig.GetContainerProperties(index);
 
@@ -169,13 +178,24 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         // The FromMemoryRecord method now handles extracting tabular_data and source_info from the payload
         var memoryRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(record);
 
-        // Optional debugging: Log the structure before upserting
-        // try {
-        //     string json = System.Text.Json.JsonSerializer.Serialize(memoryRecord);
-        //     this._logger.LogTrace("Upserting document structure: {Json}", json);
-        // } catch (Exception e) {
-        //     this._logger.LogError(e, "Error serializing record for trace log");
-        // }
+        // Extract dataset name from tags if available
+        string? datasetName = null;
+        if (record.Tags.TryGetValue("dataset_name", out var datasetNames) && 
+            datasetNames != null && 
+            datasetNames.Count > 0)
+        {
+            datasetName = datasetNames[0];
+        }
+
+        // Check if we need to extract schema information
+        if (this._config.EnableSchemaManagement && 
+            this._config.ExtractSchemaOnImport && 
+            !string.IsNullOrEmpty(datasetName) && 
+            memoryRecord.Data.Count > 0)
+        {
+            // Try to extract and store schema information
+            await this.ExtractAndStoreSchemaAsync(datasetName, memoryRecord.Data, cancellationToken).ConfigureAwait(false);
+        }
 
         var result = await this._cosmosClient
             .GetDatabase(this._databaseName)
@@ -509,6 +529,478 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Creates the schema container if it doesn't exist.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task CreateSchemaContainerAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var containerProperties = AzureCosmosDbTabularConfig.GetContainerProperties(
+                this._config.SchemaContainerName, 
+                isSchemaContainer: true);
+
+            await this._cosmosClient
+                .GetDatabase(this._databaseName)
+                .CreateContainerIfNotExistsAsync(
+                    containerProperties,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            this._logger.LogInformation("Created/Ensured schema container {Container} in database {Database}",
+                this._config.SchemaContainerName, this._databaseName);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error creating schema container {Container} in database {Database}",
+                this._config.SchemaContainerName, this._databaseName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Extracts schema information from a record and stores it.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="data">The data to extract schema from.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task ExtractAndStoreSchemaAsync(
+        string datasetName,
+        Dictionary<string, object> data,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Check if schema already exists
+            var existingSchema = await this.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
+            
+            if (existingSchema != null)
+            {
+                // Update existing schema with new column information
+                await this.UpdateSchemaAsync(existingSchema, data, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            // Create new schema
+            var schema = new TabularDataSchema
+            {
+                DatasetName = datasetName,
+                ImportDate = DateTime.UtcNow,
+                Columns = new List<SchemaColumn>()
+            };
+
+            // Extract column information
+            foreach (var kvp in data)
+            {
+                var column = new SchemaColumn
+                {
+                    Name = kvp.Key,
+                    NormalizedName = NormalizeColumnName(kvp.Key),
+                    DataType = InferDataType(kvp.Value),
+                    CommonValues = new List<string> { kvp.Value?.ToString() ?? string.Empty }
+                };
+
+                schema.Columns.Add(column);
+            }
+
+            // Store schema
+            await this.StoreSchemaAsync(schema, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error extracting and storing schema for dataset {DatasetName}", datasetName);
+        }
+    }
+
+    /// <summary>
+    /// Updates an existing schema with new column information.
+    /// </summary>
+    /// <param name="schema">The existing schema.</param>
+    /// <param name="data">The new data.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task UpdateSchemaAsync(
+        TabularDataSchema schema,
+        Dictionary<string, object> data,
+        CancellationToken cancellationToken = default)
+    {
+        bool schemaChanged = false;
+
+        // Update existing columns and add new ones
+        foreach (var kvp in data)
+        {
+            var existingColumn = schema.Columns.FirstOrDefault(c => 
+                string.Equals(c.Name, kvp.Key, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c.NormalizedName, NormalizeColumnName(kvp.Key), StringComparison.OrdinalIgnoreCase));
+
+            if (existingColumn != null)
+            {
+                // Update common values if this is a new value
+                string valueStr = kvp.Value?.ToString() ?? string.Empty;
+                if (!existingColumn.CommonValues.Contains(valueStr))
+                {
+                    existingColumn.CommonValues.Add(valueStr);
+                    if (existingColumn.CommonValues.Count > 10)
+                    {
+                        existingColumn.CommonValues.RemoveAt(0); // Keep only the 10 most recent values
+                    }
+                    schemaChanged = true;
+                }
+
+                // Verify data type consistency
+                string inferredType = InferDataType(kvp.Value);
+                if (existingColumn.DataType != inferredType)
+                {
+                    // If types don't match, use the more general type (string)
+                    if (existingColumn.DataType != "string" && inferredType != "string")
+                    {
+                        existingColumn.DataType = "string";
+                        schemaChanged = true;
+                    }
+                }
+            }
+            else
+            {
+                // Add new column
+                var newColumn = new SchemaColumn
+                {
+                    Name = kvp.Key,
+                    NormalizedName = NormalizeColumnName(kvp.Key),
+                    DataType = InferDataType(kvp.Value),
+                    CommonValues = new List<string> { kvp.Value?.ToString() ?? string.Empty }
+                };
+
+                schema.Columns.Add(newColumn);
+                schemaChanged = true;
+            }
+        }
+
+        // Only update if schema changed
+        if (schemaChanged)
+        {
+            schema.ImportDate = DateTime.UtcNow; // Update timestamp
+            await this.StoreSchemaAsync(schema, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Stores a schema in the schema container.
+    /// </summary>
+    /// <param name="schema">The schema to store.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema ID.</returns>
+    public async Task<string> StoreSchemaAsync(
+        TabularDataSchema schema,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this._config.EnableSchemaManagement)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            // Ensure schema container exists
+            await this.CreateSchemaContainerAsync(cancellationToken).ConfigureAwait(false);
+
+            // Store schema
+            var result = await this._cosmosClient
+                .GetDatabase(this._databaseName)
+                .GetContainer(this._config.SchemaContainerName)
+                .UpsertItemAsync(
+                    schema,
+                    new PartitionKey(schema.DatasetName),
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            this._logger.LogInformation("Stored schema for dataset {DatasetName}", schema.DatasetName);
+            return result.Resource.Id;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error storing schema for dataset {DatasetName}", schema.DatasetName);
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Gets a schema by dataset name.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema, or null if not found.</returns>
+    public async Task<TabularDataSchema?> GetSchemaAsync(
+        string datasetName,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this._config.EnableSchemaManagement)
+        {
+            return null;
+        }
+
+        try
+        {
+            // Query for schema by dataset name
+            var queryDefinition = new QueryDefinition(
+                "SELECT * FROM c WHERE c.datasetName = @datasetName")
+                .WithParameter("@datasetName", datasetName);
+
+            using var feedIterator = this._cosmosClient
+                .GetDatabase(this._databaseName)
+                .GetContainer(this._config.SchemaContainerName)
+                .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
+
+            if (feedIterator.HasMoreResults)
+            {
+                var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                return response.FirstOrDefault();
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error getting schema for dataset {DatasetName}", datasetName);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Lists all available schemas.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of schemas.</returns>
+    public async Task<List<TabularDataSchema>> ListSchemasAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<TabularDataSchema>();
+
+        if (!this._config.EnableSchemaManagement)
+        {
+            return result;
+        }
+
+        try
+        {
+            // Query for all schemas
+            var queryDefinition = new QueryDefinition("SELECT * FROM c");
+
+            using var feedIterator = this._cosmosClient
+                .GetDatabase(this._databaseName)
+                .GetContainer(this._config.SchemaContainerName)
+                .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
+
+            while (feedIterator.HasMoreResults)
+            {
+                var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                result.AddRange(response);
+            }
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error listing schemas");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Lists all available dataset names.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of dataset names.</returns>
+    public async Task<List<string>> ListDatasetNamesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var schemas = await this.ListSchemasAsync(cancellationToken).ConfigureAwait(false);
+        return schemas.Select(s => s.DatasetName).ToList();
+    }
+
+    /// <summary>
+    /// Validates filter parameters against a schema.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="parameters">The parameters to validate.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A tuple containing the validated parameters and any warnings.</returns>
+    public async Task<(Dictionary<string, object> ValidatedParameters, List<string> Warnings)> ValidateParametersAsync(
+        string datasetName,
+        Dictionary<string, object> parameters,
+        CancellationToken cancellationToken = default)
+    {
+        var validatedParameters = new Dictionary<string, object>();
+        var warnings = new List<string>();
+
+        if (!this._config.EnableSchemaManagement)
+        {
+            return (parameters, new List<string> { "Schema management is disabled. Parameters not validated." });
+        }
+
+        // Get schema for the dataset
+        var schema = await this.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
+        if (schema == null)
+        {
+            return (parameters, new List<string> { $"No schema found for dataset '{datasetName}'. Parameters not validated." });
+        }
+
+        // Validate each parameter
+        foreach (var param in parameters)
+        {
+            string key = param.Key;
+            object value = param.Value;
+
+            // Handle data. prefix
+            string fieldName = key;
+            if (key.StartsWith("data.", StringComparison.Ordinal))
+            {
+                fieldName = key.Substring(5);
+            }
+
+            // Find matching column in schema
+            var column = schema.Columns.FirstOrDefault(c => 
+                string.Equals(c.Name, fieldName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c.NormalizedName, fieldName, StringComparison.OrdinalIgnoreCase));
+
+            if (column == null)
+            {
+                warnings.Add($"Field '{fieldName}' not found in schema for dataset '{datasetName}'.");
+                validatedParameters[key] = value; // Add anyway, but with warning
+                continue;
+            }
+
+            // Validate value against column type
+            if (ValidateValue(value, column.DataType))
+            {
+                // Use the normalized name from the schema
+                string normalizedKey = key.StartsWith("data.", StringComparison.Ordinal)
+                    ? $"data.{column.NormalizedName}"
+                    : column.NormalizedName;
+
+                validatedParameters[normalizedKey] = value;
+            }
+            else
+            {
+                warnings.Add($"Value '{value}' is not valid for field '{fieldName}' of type '{column.DataType}'.");
+                validatedParameters[key] = value; // Add anyway, but with warning
+            }
+        }
+
+        return (validatedParameters, warnings);
+    }
+
+    /// <summary>
+    /// Validates a value against a data type.
+    /// </summary>
+    /// <param name="value">The value to validate.</param>
+    /// <param name="dataType">The data type.</param>
+    /// <returns>True if the value is valid for the data type, false otherwise.</returns>
+    private bool ValidateValue(object value, string dataType)
+    {
+        if (value == null)
+        {
+            return true; // Null is valid for any type
+        }
+
+        string valueStr = value.ToString() ?? string.Empty;
+
+        switch (dataType.ToLowerInvariant())
+        {
+            case "string":
+                return true; // Any value is valid as a string
+
+            case "number":
+            case "integer":
+                return double.TryParse(valueStr, out _);
+
+            case "boolean":
+                return bool.TryParse(valueStr, out _);
+
+            case "date":
+            case "datetime":
+                return DateTime.TryParse(valueStr, out _);
+
+            default:
+                return true; // Unknown type, assume valid
+        }
+    }
+
+    /// <summary>
+    /// Infers the data type of a value.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The inferred data type.</returns>
+    private string InferDataType(object? value)
+    {
+        if (value == null)
+        {
+            return "string";
+        }
+
+        if (value is bool)
+        {
+            return "boolean";
+        }
+
+        if (value is int or long or float or double or decimal)
+        {
+            return "number";
+        }
+
+        if (value is DateTime)
+        {
+            return "date";
+        }
+
+        string valueStr = value.ToString() ?? string.Empty;
+
+        if (bool.TryParse(valueStr, out _))
+        {
+            return "boolean";
+        }
+
+        if (int.TryParse(valueStr, out _) || double.TryParse(valueStr, out _))
+        {
+            return "number";
+        }
+
+        if (DateTime.TryParse(valueStr, out _))
+        {
+            return "date";
+        }
+
+        return "string";
+    }
+
+    /// <summary>
+    /// Normalizes a column name to snake_case.
+    /// </summary>
+    /// <param name="columnName">The column name to normalize.</param>
+    /// <returns>The normalized column name.</returns>
+    private static string NormalizeColumnName(string columnName)
+    {
+        // Convert camelCase or PascalCase to snake_case
+        string snakeCase = Regex.Replace(
+            columnName,
+            "(?<=[a-z])(?=[A-Z])",
+            "_"
+        ).ToLowerInvariant();
+
+        // Replace spaces and other non-alphanumeric characters with underscores
+        snakeCase = Regex.Replace(snakeCase, "[^a-z0-9]", "_");
+
+        // Remove consecutive underscores
+        while (snakeCase.Contains("__"))
+        {
+            snakeCase = snakeCase.Replace("__", "_");
+        }
+
+        // Trim underscores from start and end
+        return snakeCase.Trim('_');
     }
 
     /// <summary>

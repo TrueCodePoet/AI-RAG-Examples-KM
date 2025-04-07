@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.KernelMemory;
+﻿﻿﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -21,7 +21,11 @@ var appConfig = KernelInitializer.LoadConfiguration();
  
 // Initialize Kernel and Memory using the helper class
 var kernel = KernelInitializer.InitializeKernel(appConfig.AzureOpenAITextConfig);
-var memory = KernelInitializer.InitializeMemory(appConfig.AzureOpenAITextConfig, appConfig.AzureOpenAIEmbeddingConfig, appConfig.CosmosDbSettings);
+var memory = KernelInitializer.InitializeMemory(
+    appConfig.AzureOpenAITextConfig, 
+    appConfig.AzureOpenAIEmbeddingConfig, 
+    appConfig.CosmosDbSettings,
+    IndexName); // Pass the index name to use as dataset name
  
 // Create an instance of BlobStorageProcessor
 var fileProcessor = new BlobStorageProcessor(

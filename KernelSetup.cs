@@ -74,7 +74,7 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
             return kernel;
         }
 
-        public static IKernelMemory InitializeMemory(AzureOpenAIConfig textConfig, AzureOpenAIConfig embeddingConfig, CosmosDbSettings cosmosConfig)
+        public static IKernelMemory InitializeMemory(AzureOpenAIConfig textConfig, AzureOpenAIConfig embeddingConfig, CosmosDbSettings cosmosConfig, string indexName = "servers-inventory")
         {
              var memory = new KernelMemoryBuilder()
                 .WithAzureOpenAITextGeneration(textConfig)
@@ -89,15 +89,17 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
                 //    MaxTokensPerParagraph = 1000,
                 //    OverlappingTokens = 100
                 //})
-                .WithTabularExcelDecoder(config =>
-                {
-                    // Configure Excel parsing options
-                    config.UseFirstRowAsHeader = true;
-                    config.PreserveDataTypes = true;
-                    config.ProcessAllWorksheets = true;
-                    // Optionally specify which worksheets to process
-                    // config.WorksheetsToProcess = new List<string> { "Sheet1", "Data" };
-                })
+                .WithTabularExcelDecoderAndDataset(
+                    datasetName: indexName,
+                    configure: config =>
+                    {
+                        // Configure Excel parsing options
+                        config.UseFirstRowAsHeader = true;
+                        config.PreserveDataTypes = true;
+                        config.ProcessAllWorksheets = true;
+                        // Optionally specify which worksheets to process
+                        // config.WorksheetsToProcess = new List<string> { "Sheet1", "Data" };
+                    })
                 //.With(new MsExcelDecoderConfig {BlankCellValue = "NO-VALUE"}) // Keep commented out
                 //.With(new MsPowerPointDecoderConfig {SkipHiddenSlides = true, WithSlideNumber = true}) // Keep commented out
                 .Build<MemoryServerless>(new KernelMemoryBuilderBuildOptions { AllowMixingVolatileAndPersistentData = true });

@@ -1,11 +1,9 @@
 // Copyright (c) Microsoft. All rights reserved.
 
-// using System.Collections.Generic; // Removed unnecessary using directive
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Azure.Cosmos;
-// using Microsoft.Azure.Cosmos.Serialization; // Removed unnecessary using directive
 
 namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 
@@ -30,6 +28,21 @@ public sealed class AzureCosmosDbTabularConfig
     public string DatabaseName { get; init; } = "memory";
 
     /// <summary>
+    /// Whether to enable schema management. Defaults to true.
+    /// </summary>
+    public bool EnableSchemaManagement { get; init; } = true;
+
+    /// <summary>
+    /// Name of the container to use for schema storage. Defaults to "schemas".
+    /// </summary>
+    public string SchemaContainerName { get; init; } = "schemas";
+
+    /// <summary>
+    /// Whether to extract schema information during document processing. Defaults to true.
+    /// </summary>
+    public bool ExtractSchemaOnImport { get; init; } = true;
+
+    /// <summary>
     /// Default JSON serializer options.
     /// </summary>
     internal static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new()
@@ -44,12 +57,18 @@ public sealed class AzureCosmosDbTabularConfig
     /// Gets the container properties for the specified container ID.
     /// </summary>
     /// <param name="containerId">The container ID.</param>
+    /// <param name="isSchemaContainer">Whether this is a schema container.</param>
     /// <returns>The container properties.</returns>
-    internal static ContainerProperties GetContainerProperties(string containerId)
+    internal static ContainerProperties GetContainerProperties(string containerId, bool isSchemaContainer = false)
     {
+        // For schema containers, use dataset_name as the partition key
+        var partitionKeyPath = isSchemaContainer 
+            ? "/datasetName" 
+            : $"/{AzureCosmosDbTabularMemoryRecord.FileField}";
+
         var properties = new ContainerProperties(
             containerId,
-            $"/{AzureCosmosDbTabularMemoryRecord.FileField}");
+            partitionKeyPath);
 
         // Include all paths in the indexing policy
         properties.IndexingPolicy.IncludedPaths.Add(new IncludedPath { Path = "/*" });

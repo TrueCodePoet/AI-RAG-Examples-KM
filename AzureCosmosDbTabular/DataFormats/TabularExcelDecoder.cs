@@ -26,17 +26,73 @@ public sealed class TabularExcelDecoder : IContentDecoder
 {
     private readonly TabularExcelDecoderConfig _config;
     private readonly ILogger<TabularExcelDecoder> _log;
+    private readonly AzureCosmosDbTabularMemory? _memory;
+    private string _datasetName = string.Empty;
     private static readonly Regex s_invalidCharsRegex = new(@"[^\w\d]", RegexOptions.Compiled);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabularExcelDecoder"/> class.
     /// </summary>
     /// <param name="config">The configuration.</param>
+    /// <param name="memory">Optional memory instance for schema extraction.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public TabularExcelDecoder(TabularExcelDecoderConfig? config = null, ILoggerFactory? loggerFactory = null)
+    internal TabularExcelDecoder(
+        TabularExcelDecoderConfig? config = null, 
+        AzureCosmosDbTabularMemory? memory = null,
+        ILoggerFactory? loggerFactory = null)
     {
         this._config = config ?? new TabularExcelDecoderConfig();
+        this._memory = memory;
         this._log = (loggerFactory ?? DefaultLogger.Factory).CreateLogger<TabularExcelDecoder>();
+    }
+
+    /// <summary>
+    /// Sets the dataset name for schema extraction.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <returns>The decoder instance for method chaining.</returns>
+    public TabularExcelDecoder WithDatasetName(string datasetName)
+    {
+        this._datasetName = datasetName;
+        return this;
+    }
+
+    /// <summary>
+    /// Factory method to create a TabularExcelDecoder with dataset name.
+    /// </summary>
+    /// <param name="config">The configuration.</param>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <returns>A new TabularExcelDecoder instance.</returns>
+    public static IContentDecoder CreateWithDatasetName(
+        TabularExcelDecoderConfig config, 
+        string datasetName,
+        ILoggerFactory? loggerFactory = null)
+    {
+        // Create a new instance
+        var decoder = new TabularExcelDecoder(config, null, loggerFactory);
+        
+        // Set the dataset name
+        if (!string.IsNullOrEmpty(datasetName))
+        {
+            decoder._datasetName = datasetName;
+        }
+        
+        return decoder;
+    }
+
+    /// <summary>
+    /// Sets the dataset name for schema extraction and metadata.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <returns>The decoder instance for method chaining.</returns>
+    public static TabularExcelDecoder WithDatasetName(TabularExcelDecoder decoder, string datasetName)
+    {
+        if (!string.IsNullOrEmpty(datasetName))
+        {
+            decoder._datasetName = datasetName;
+        }
+        return decoder;
     }
 
     /// <inheritdoc />
@@ -94,10 +150,34 @@ public sealed class TabularExcelDecoder : IContentDecoder
 
         using (workbook) // Ensure disposal if workbook was loaded successfully
         {
+            // Extract schema if memory is provided and dataset name is set
+            if (this._memory != null && !string.IsNullOrEmpty(this._datasetName))
+            {
+                try
+                {
+                    var schema = ExtractSchemaFromWorkbook(workbook, this._datasetName);
+                    if (schema != null)
+                    {
+                        // Store schema asynchronously but don't await it to avoid blocking
+                        _ = this._memory.StoreSchemaAsync(schema, cancellationToken)
+                            .ContinueWith(t => 
+                            {
+                                if (t.IsFaulted)
+                                {
+                                    this._log.LogError(t.Exception, "Error storing schema for dataset {DatasetName}", this._datasetName);
+                                }
+                            }, TaskScheduler.Current);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._log.LogError(ex, "Error extracting schema from Excel file for dataset {DatasetName}", this._datasetName);
+                }
+            }
+
             var chunkNumber = 0;
             foreach (var worksheet in workbook.Worksheets)
             {
-                // ... (rest of the loop remains the same) ...
 
                 // Skip worksheet if not in the list of worksheets to process
                 if (!this._config.ProcessAllWorksheets &&
@@ -216,6 +296,12 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         ["tabular_data"] = JsonSerializer.Serialize(rowData) // Use snake_case key to match UpsertAsync expectation
                     };
 
+                    // Add dataset name if provided
+                    if (!string.IsNullOrEmpty(this._datasetName))
+                    {
+                        metadata["dataset_name"] = this._datasetName;
+                    }
+
                     // Create a more descriptive text representation for the chunk content
                     var sb = new StringBuilder();
                     sb.Append($"Record from worksheet {worksheetName}, row {rowNumber}:");
@@ -286,6 +372,166 @@ public sealed class TabularExcelDecoder : IContentDecoder
             // Convert everything to string
             return cell.Value.ToString() ?? string.Empty;
         }
+    }
+
+    /// <summary>
+    /// Extracts schema information from a workbook.
+    /// </summary>
+    /// <param name="workbook">The workbook to extract schema from.</param>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <returns>The extracted schema.</returns>
+    private TabularDataSchema ExtractSchemaFromWorkbook(XLWorkbook workbook, string datasetName)
+    {
+        var schema = new TabularDataSchema
+        {
+            DatasetName = datasetName,
+            ImportDate = DateTime.UtcNow,
+            SourceFile = "excel_import",
+            Columns = new List<SchemaColumn>()
+        };
+
+        // Process the first worksheet to extract schema
+        var worksheet = workbook.Worksheets.FirstOrDefault();
+        if (worksheet == null)
+        {
+            return schema;
+        }
+
+        var rangeUsed = worksheet.RangeUsed();
+        if (rangeUsed == null)
+        {
+            return schema;
+        }
+
+        // Get headers from the specified row
+        var headerRow = rangeUsed.Row(this._config.HeaderRowIndex + 1);
+        if (this._config.UseFirstRowAsHeader && headerRow != null)
+        {
+            foreach (var cell in headerRow.CellsUsed())
+            {
+                var headerText = cell.Value.ToString() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(headerText))
+                {
+                    headerText = $"{this._config.DefaultColumnPrefix}{cell.Address.ColumnNumber}";
+                }
+
+                // Normalize header name if configured
+                string normalizedName = headerText;
+                if (this._config.NormalizeHeaderNames)
+                {
+                    normalizedName = NormalizeHeaderName(headerText);
+                }
+
+                // Infer data type by sampling values in the column
+                string dataType = InferColumnDataType(worksheet, cell.Address.ColumnNumber, this._config.HeaderRowIndex + 1);
+
+                // Sample common values
+                var commonValues = SampleColumnValues(worksheet, cell.Address.ColumnNumber, this._config.HeaderRowIndex + 1);
+
+                // Create schema column
+                var column = new SchemaColumn
+                {
+                    Name = headerText,
+                    NormalizedName = normalizedName,
+                    DataType = dataType,
+                    IsRequired = false, // Default to false
+                    CommonValues = commonValues
+                };
+
+                schema.Columns.Add(column);
+            }
+        }
+
+        return schema;
+    }
+
+    /// <summary>
+    /// Infers the data type of a column by sampling values.
+    /// </summary>
+    /// <param name="worksheet">The worksheet.</param>
+    /// <param name="columnNumber">The column number.</param>
+    /// <param name="startRow">The starting row.</param>
+    /// <returns>The inferred data type.</returns>
+    private string InferColumnDataType(IXLWorksheet worksheet, int columnNumber, int startRow)
+    {
+        var dataTypes = new Dictionary<string, int>
+        {
+            { "string", 0 },
+            { "number", 0 },
+            { "boolean", 0 },
+            { "date", 0 }
+        };
+
+        // Sample up to 100 rows to determine the most common data type
+        var maxRows = Math.Min(worksheet.LastRowUsed().RowNumber(), startRow + 100);
+        var sampleCount = 0;
+
+        for (var rowNumber = startRow + 1; rowNumber <= maxRows; rowNumber++)
+        {
+            var cell = worksheet.Cell(rowNumber, columnNumber);
+            if (cell == null || cell.Value.IsBlank)
+            {
+                continue;
+            }
+
+            sampleCount++;
+
+            if (cell.Value.IsBoolean)
+            {
+                dataTypes["boolean"]++;
+            }
+            else if (cell.Value.IsDateTime)
+            {
+                dataTypes["date"]++;
+            }
+            else if (cell.Value.IsNumber)
+            {
+                dataTypes["number"]++;
+            }
+            else
+            {
+                dataTypes["string"]++;
+            }
+        }
+
+        // If no samples, default to string
+        if (sampleCount == 0)
+        {
+            return "string";
+        }
+
+        // Return the most common data type
+        return dataTypes.OrderByDescending(kvp => kvp.Value).First().Key;
+    }
+
+    /// <summary>
+    /// Samples common values from a column.
+    /// </summary>
+    /// <param name="worksheet">The worksheet.</param>
+    /// <param name="columnNumber">The column number.</param>
+    /// <param name="startRow">The starting row.</param>
+    /// <returns>A list of common values.</returns>
+    private List<string> SampleColumnValues(IXLWorksheet worksheet, int columnNumber, int startRow)
+    {
+        var values = new HashSet<string>();
+        var maxRows = Math.Min(worksheet.LastRowUsed().RowNumber(), startRow + 100);
+
+        for (var rowNumber = startRow + 1; rowNumber <= maxRows; rowNumber++)
+        {
+            var cell = worksheet.Cell(rowNumber, columnNumber);
+            if (cell == null || cell.Value.IsBlank)
+            {
+                continue;
+            }
+
+            var value = cell.Value.ToString() ?? string.Empty;
+            if (!string.IsNullOrEmpty(value) && values.Count < 10)
+            {
+                values.Add(value);
+            }
+        }
+
+        return values.ToList();
     }
 
     /// <summary>

@@ -5,6 +5,8 @@ using Microsoft.SemanticKernel.Connectors.AzureOpenAI; // For AzureOpenAIPromptE
 using Microsoft.KernelMemory.AI.AzureOpenAI; // For AzureOpenAIConfig
 using System.Text.Json; // For JsonSerializer
 using Microsoft.SemanticKernel.Connectors.OpenAI; // For MemoryFilter
+using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular; // For TabularFilterHelper
+using Microsoft.Extensions.DependencyInjection; // For GetRequiredService
 
 namespace AI_RAG_Examples_KM
 {
@@ -117,6 +119,62 @@ namespace AI_RAG_Examples_KM
 
         public async Task AskTabularQuestionAsync(string question)
         {
+            // --- Dataset Identification Step ---
+            Console.WriteLine("--- Identifying Dataset ---");
+            
+            string datasetName = string.Empty;
+            
+            try
+            {
+                // Create a TabularFilterHelper to access schema functionality
+                var filterHelper = new TabularFilterHelper(_memory);
+                
+                // Get list of available datasets
+                var datasetList = await filterHelper.ListDatasetNamesAsync();
+                
+                if (datasetList.Count > 0)
+                {
+                    // Use LLM to identify the most relevant dataset
+                    string datasetPromptTemplate = @"
+You are analyzing a user query to determine which dataset it is most likely referring to.
+
+Available datasets:
+{{$datasets}}
+
+User query: {{$query}}
+
+Analyze the query and determine which dataset it is most likely referring to.
+Return ONLY the name of the most relevant dataset. If no dataset seems relevant, return 'none'.
+
+Dataset:";
+
+                    var datasetFunction = _kernel.CreateFunctionFromPrompt(
+                        datasetPromptTemplate,
+                        new OpenAIPromptExecutionSettings { Temperature = 0.0 });
+                    
+                    var datasetResult = await _kernel.InvokeAsync(datasetFunction, new KernelArguments
+                    {
+                        ["datasets"] = string.Join("\n", datasetList.Select(d => $"- {d}")),
+                        ["query"] = question
+                    });
+                    
+                    datasetName = datasetResult.GetValue<string>()?.Trim();
+                    
+                    if (string.IsNullOrEmpty(datasetName) || datasetName.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    {
+                        datasetName = string.Empty;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Identified dataset: {datasetName}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during dataset identification: {ex.Message}");
+            }
+            
             // --- Filter Generation Step ---
             Console.WriteLine("--- Generating Filters ---");
          
@@ -171,6 +229,8 @@ namespace AI_RAG_Examples_KM
             );
          
             MemoryFilter? generatedFilter = null;
+            List<string> warnings = new List<string>();
+            
             try
             {
                 var filterResult = await _kernel.InvokeAsync(generateFiltersFunction, new() { { "input", question } });
@@ -183,15 +243,58 @@ namespace AI_RAG_Examples_KM
                     var filterDict = JsonSerializer.Deserialize<Dictionary<string, string>>(filterJson);
                     if (filterDict != null && filterDict.Count > 0)
                     {
-                        generatedFilter = new MemoryFilter();
-                        foreach (var kvp in filterDict)
+                        // Convert string values to object values for validation
+                        var paramDict = filterDict.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
+                        
+                        // If we have a dataset name, validate parameters against schema
+                        if (!string.IsNullOrEmpty(datasetName))
                         {
-                            if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                            try
                             {
-                                // Add directly - no C# normalization needed
-                                generatedFilter.Add(kvp.Key, kvp.Value);
+                                var filterHelper = new TabularFilterHelper(_memory);
+                                var result = await filterHelper.GenerateValidatedFilterAsync(
+                                    datasetName, paramDict);
+                                
+                                generatedFilter = result.Filter;
+                                warnings.AddRange(result.Warnings);
+                                
+                                if (result.Warnings.Count > 0)
+                                {
+                                    Console.WriteLine("Validation warnings:");
+                                    foreach (var warning in result.Warnings)
+                                    {
+                                        Console.WriteLine($"  - {warning}");
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Error during parameter validation: {ex.Message}");
+                                
+                                // Fall back to unvalidated filter
+                                generatedFilter = new MemoryFilter();
+                                foreach (var kvp in filterDict)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                                    {
+                                        generatedFilter.Add(kvp.Key, kvp.Value);
+                                    }
+                                }
                             }
                         }
+                        else
+                        {
+                            // No dataset identified, use unvalidated filter
+                            generatedFilter = new MemoryFilter();
+                            foreach (var kvp in filterDict)
+                            {
+                                if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                                {
+                                    generatedFilter.Add(kvp.Key, kvp.Value);
+                                }
+                            }
+                        }
+                        
                         Console.WriteLine($"Applied Filter: {JsonSerializer.Serialize(generatedFilter)}"); // Debug output
                     }
                 }

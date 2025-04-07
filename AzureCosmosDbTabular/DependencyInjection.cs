@@ -3,6 +3,7 @@
 using System;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.KernelMemory.DataFormats;
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.DataFormats;
 using Microsoft.KernelMemory.MemoryStorage;
@@ -85,6 +86,9 @@ public static class DependencyInjection
         builder.Services.AddSingleton(cosmosClient);
         builder.Services.AddSingleton(config);
         builder.Services.AddSingleton<IMemoryDb, AzureCosmosDbTabularMemory>();
+        
+        // Register the TabularFilterHelper
+        builder.Services.AddSingleton<TabularFilterHelper>();
 
         return builder;
     }
@@ -104,6 +108,30 @@ public static class DependencyInjection
 
         builder.Services.AddSingleton(config);
         builder.Services.AddSingleton<IContentDecoder, TabularExcelDecoder>();
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Add TabularExcelDecoder with dataset name to Kernel Memory.
+    /// </summary>
+    /// <param name="builder">The Kernel Memory builder.</param>
+    /// <param name="datasetName">The dataset name to use for schema extraction.</param>
+    /// <param name="configure">Optional action to configure the decoder.</param>
+    /// <returns>The Kernel Memory builder.</returns>
+    public static IKernelMemoryBuilder WithTabularExcelDecoderAndDataset(
+        this IKernelMemoryBuilder builder,
+        string datasetName,
+        Action<TabularExcelDecoderConfig>? configure = null)
+    {
+        var config = new TabularExcelDecoderConfig();
+        configure?.Invoke(config);
+
+        // Create the decoder with dataset name
+        var decoder = (TabularExcelDecoder)TabularExcelDecoder.CreateWithDatasetName(config, datasetName);
+        
+        // Register the decoder
+        builder.Services.AddSingleton<IContentDecoder>(decoder);
 
         return builder;
     }

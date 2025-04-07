@@ -75,6 +75,98 @@ public class TabularFilterHelper
     }
 
     /// <summary>
+    /// Gets a schema by dataset name.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema, or null if not found.</returns>
+    public async Task<TabularDataSchema?> GetSchemaAsync(
+        string datasetName,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Get the schema
+        return await memoryDb.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Lists all available schemas.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of schemas.</returns>
+    public async Task<List<TabularDataSchema>> ListSchemasAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // List schemas
+        return await memoryDb.ListSchemasAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Lists all available dataset names.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of dataset names.</returns>
+    public async Task<List<string>> ListDatasetNamesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // List dataset names
+        return await memoryDb.ListDatasetNamesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Validates parameters against a schema.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="parameters">The parameters to validate.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A tuple containing the validated parameters and any warnings.</returns>
+    public async Task<(Dictionary<string, object> ValidatedParameters, List<string> Warnings)> ValidateParametersAsync(
+        string datasetName,
+        Dictionary<string, object> parameters,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Validate parameters
+        return await memoryDb.ValidateParametersAsync(datasetName, parameters, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Generates a validated filter based on parameters and schema.
+    /// </summary>
+    /// <param name="datasetName">The dataset name.</param>
+    /// <param name="parameters">The parameters to validate.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A tuple containing the generated filter and any warnings.</returns>
+    public async Task<(MemoryFilter Filter, List<string> Warnings)> GenerateValidatedFilterAsync(
+        string datasetName,
+        Dictionary<string, object> parameters,
+        CancellationToken cancellationToken = default)
+    {
+        // Validate parameters against schema
+        var (validatedParameters, warnings) = await ValidateParametersAsync(
+            datasetName, parameters, cancellationToken).ConfigureAwait(false);
+
+        // Create filter with validated parameters
+        var filter = new MemoryFilter();
+        foreach (var param in validatedParameters)
+        {
+            filter.Add(param.Key, param.Value?.ToString() ?? string.Empty);
+        }
+
+        return (filter, warnings);
+    }
+
+    /// <summary>
     /// Generates a filter based on field and value.
     /// </summary>
     /// <param name="fieldType">The field type (tag or data).</param>
@@ -92,6 +184,30 @@ public class TabularFilterHelper
         else // data field
         {
             filter.Add($"data.{fieldName}", value);
+        }
+
+        return filter;
+    }
+
+    /// <summary>
+    /// Generates a filter based on field and value.
+    /// </summary>
+    /// <param name="fieldType">The field type (tag or data).</param>
+    /// <param name="fieldName">The field name.</param>
+    /// <param name="value">The value to filter for.</param>
+    /// <returns>The generated memory filter.</returns>
+    public MemoryFilter GenerateObjectFilter(string fieldType, string fieldName, object value)
+    {
+        var filter = new MemoryFilter();
+        string stringValue = value?.ToString() ?? string.Empty;
+
+        if (fieldType == "tag")
+        {
+            filter.Add(fieldName, stringValue);
+        }
+        else // data field
+        {
+            filter.Add($"data.{fieldName}", stringValue);
         }
 
         return filter;
