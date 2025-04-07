@@ -56,7 +56,7 @@ var queryProcessor = new KernelMemoryQueryProcessor(
     appConfig.AzureOpenAITextConfig);
 
 // This section indexes from the blob storage
-await fileProcessor.ProcessBlobsFromStorageAsync();
+// await fileProcessor.ProcessBlobsFromStorageAsync();
  
 // This section indexes from local File system
 await fileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");

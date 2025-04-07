@@ -242,7 +242,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     }
 
     /// <summary>
-    /// Creates or updates a schema for the given dataset and returns its ID and import batch ID.
+    /// Creates a new schema for the given dataset and returns its ID and import batch ID.
     /// </summary>
     /// <param name="datasetName">The dataset name.</param>
     /// <param name="sourceFileName">The source file name.</param>
@@ -259,41 +259,82 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     {
         try
         {
-            // Check if schema already exists
+            // Always create a new schema with a unique ID for each import
+            var schema = TabularDataSchema.Create(datasetName, sourceFileName);
+            
+            // Get existing schema to copy column information if available
             var existingSchema = await this.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
             
             if (existingSchema != null)
             {
-                // Update existing schema with new column information
-                await this.UpdateSchemaAsync(existingSchema, data, cancellationToken).ConfigureAwait(false);
-                return (existingSchema.Id, existingSchema.ImportBatchId);
+                // Copy column information from existing schema
+                foreach (var column in existingSchema.Columns)
+                {
+                    // Only add if not already in the new schema
+                    if (!schema.Columns.Any(c => string.Equals(c.Name, column.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        schema.Columns.Add(column);
+                    }
+                }
             }
 
-            // Create new schema with a unique ID and import batch ID
-            var schema = TabularDataSchema.Create(datasetName, sourceFileName);
-
-            // Extract column information
+            // Add or update column information from current data
             foreach (var kvp in data)
             {
-                var column = new SchemaColumn
+                // Check if column already exists in the schema
+                var existingColumn = schema.Columns.FirstOrDefault(c => 
+                    string.Equals(c.Name, kvp.Key, StringComparison.OrdinalIgnoreCase));
+                    
+                if (existingColumn != null)
                 {
-                    Name = kvp.Key,
-                    NormalizedName = NormalizeColumnName(kvp.Key),
-                    DataType = InferDataType(kvp.Value),
-                    CommonValues = new List<string> { kvp.Value?.ToString() ?? string.Empty }
-                };
+                    // Update existing column with new value
+                    string valueStr = kvp.Value?.ToString() ?? string.Empty;
+                    if (!existingColumn.CommonValues.Contains(valueStr))
+                    {
+                        existingColumn.CommonValues.Add(valueStr);
+                        if (existingColumn.CommonValues.Count > 10)
+                        {
+                            existingColumn.CommonValues.RemoveAt(0); // Keep only the 10 most recent values
+                        }
+                    }
+                    
+                    // Verify data type consistency
+                    string inferredType = InferDataType(kvp.Value);
+                    if (existingColumn.DataType != inferredType)
+                    {
+                        // If types don't match, use the more general type (string)
+                        if (existingColumn.DataType != "string" && inferredType != "string")
+                        {
+                            existingColumn.DataType = "string";
+                        }
+                    }
+                }
+                else
+                {
+                    // Add new column
+                    var column = new SchemaColumn
+                    {
+                        Name = kvp.Key,
+                        NormalizedName = NormalizeColumnName(kvp.Key),
+                        DataType = InferDataType(kvp.Value),
+                        CommonValues = new List<string> { kvp.Value?.ToString() ?? string.Empty }
+                    };
 
-                schema.Columns.Add(column);
+                    schema.Columns.Add(column);
+                }
             }
 
-            // Store schema in the specified index
+            // Store the new schema
             await this.StoreSchemaAsync(schema, indexName, cancellationToken).ConfigureAwait(false);
             
+            this._logger.LogInformation("Created new schema {SchemaId} for dataset {DatasetName} with import batch {ImportBatchId}", 
+                schema.Id, datasetName, schema.ImportBatchId);
+                
             return (schema.Id, schema.ImportBatchId);
         }
         catch (Exception ex)
         {
-            this._logger.LogError(ex, "Error creating or updating schema for dataset {DatasetName}", datasetName);
+            this._logger.LogError(ex, "Error creating schema for dataset {DatasetName}", datasetName);
             return (string.Empty, string.Empty);
         }
     }
@@ -776,12 +817,11 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             schema.Metadata["document_type"] = "schema";
             
             // Ensure the ID is prefixed to avoid collisions with regular documents
-            if (!schema.Id.StartsWith("schema_"))
-            {
-                schema.Id = $"schema_{schema.DatasetName}";
-            }
+            // We no longer overwrite the ID with a generic one based on dataset name
+            // This preserves the unique ID generated in TabularDataSchema.Create()
             
             // Set the file property to match the dataset name (used as partition key)
+            // This allows efficient querying by dataset name while maintaining unique IDs
             schema.File = schema.DatasetName;
 
             // Determine which container to use for schema storage
@@ -897,6 +937,137 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         catch (Exception ex)
         {
             this._logger.LogError(ex, "Error getting schema for dataset {DatasetName}", datasetName);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets schemas by source file name from any available index container.
+    /// </summary>
+    /// <param name="sourceFileName">The source file name.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of schemas for the specified source file.</returns>
+    public async Task<List<TabularDataSchema>> GetSchemasBySourceFileAsync(
+        string sourceFileName,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<TabularDataSchema>();
+        
+        if (!this._config.EnableSchemaManagement)
+        {
+            return result;
+        }
+
+        try
+        {
+            // Get all available indexes
+            var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+            
+            // If no indexes exist, return empty list
+            if (!indexes.Any())
+            {
+                return result;
+            }
+            
+            // Query for schema by source file name and document_type
+            var queryDefinition = new QueryDefinition(
+                "SELECT * FROM c WHERE c.sourceFile = @sourceFile AND c.metadata.document_type = 'schema'")
+                .WithParameter("@sourceFile", sourceFileName);
+
+            // Try to find schemas in any of the available indexes
+            foreach (var index in indexes)
+            {
+                try
+                {
+                    using var feedIterator = this._cosmosClient
+                        .GetDatabase(this._databaseName)
+                        .GetContainer(index)
+                        .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
+
+                    while (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                        result.AddRange(response);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogWarning(ex, "Error searching for schemas by source file in container {Container}", index);
+                    // Continue to the next container
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error getting schemas for source file {SourceFileName}", sourceFileName);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets a schema by ID from any available index container.
+    /// </summary>
+    /// <param name="schemaId">The schema ID.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema, or null if not found.</returns>
+    public async Task<TabularDataSchema?> GetSchemaByIdAsync(
+        string schemaId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this._config.EnableSchemaManagement)
+        {
+            return null;
+        }
+
+        try
+        {
+            // Get all available indexes
+            var indexes = await this.GetIndexesAsync(cancellationToken).ConfigureAwait(false);
+            
+            // If no indexes exist, return null
+            if (!indexes.Any())
+            {
+                return null;
+            }
+            
+            // Query for schema by ID and document_type
+            var queryDefinition = new QueryDefinition(
+                "SELECT * FROM c WHERE c.id = @id AND c.metadata.document_type = 'schema'")
+                .WithParameter("@id", schemaId);
+
+            // Try to find the schema in any of the available indexes
+            foreach (var index in indexes)
+            {
+                try
+                {
+                    using var feedIterator = this._cosmosClient
+                        .GetDatabase(this._databaseName)
+                        .GetContainer(index)
+                        .GetItemQueryIterator<TabularDataSchema>(queryDefinition);
+
+                    if (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                        var schema = response.FirstOrDefault();
+                        if (schema != null)
+                        {
+                            return schema;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogWarning(ex, "Error searching for schema by ID in container {Container}", index);
+                    // Continue to the next container
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error getting schema for ID {SchemaId}", schemaId);
             return null;
         }
     }

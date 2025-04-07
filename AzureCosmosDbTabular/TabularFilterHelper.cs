@@ -122,6 +122,117 @@ public class TabularFilterHelper
     }
 
     /// <summary>
+    /// Gets schemas by source file name.
+    /// </summary>
+    /// <param name="sourceFileName">The source file name.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of schemas for the specified source file.</returns>
+    public async Task<List<TabularDataSchema>> GetSchemasBySourceFileAsync(
+        string sourceFileName,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Get schemas by source file
+        return await memoryDb.GetSchemasBySourceFileAsync(sourceFileName, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Gets a schema by ID.
+    /// </summary>
+    /// <param name="schemaId">The schema ID.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema, or null if not found.</returns>
+    public async Task<TabularDataSchema?> GetSchemaByIdAsync(
+        string schemaId,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Get schema by ID
+        return await memoryDb.GetSchemaByIdAsync(schemaId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Gets all records that belong to a specific schema.
+    /// </summary>
+    /// <param name="indexName">The index name.</param>
+    /// <param name="schemaId">The schema ID.</param>
+    /// <param name="limit">The maximum number of records to return.</param>
+    /// <param name="withEmbeddings">Whether to include embeddings in the results.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of memory records.</returns>
+    public async Task<List<MemoryRecord>> GetRecordsBySchemaIdAsync(
+        string indexName,
+        string schemaId,
+        int limit = 100,
+        bool withEmbeddings = false,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Get records by schema ID
+        var result = new List<MemoryRecord>();
+        await foreach (var record in memoryDb.GetRecordsBySchemaIdAsync(
+            indexName, schemaId, limit, withEmbeddings, cancellationToken))
+        {
+            result.Add(record);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Gets all records that belong to a specific import batch.
+    /// </summary>
+    /// <param name="indexName">The index name.</param>
+    /// <param name="importBatchId">The import batch ID.</param>
+    /// <param name="limit">The maximum number of records to return.</param>
+    /// <param name="withEmbeddings">Whether to include embeddings in the results.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A list of memory records.</returns>
+    public async Task<List<MemoryRecord>> GetRecordsByImportBatchIdAsync(
+        string indexName,
+        string importBatchId,
+        int limit = 100,
+        bool withEmbeddings = false,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Get records by import batch ID
+        var result = new List<MemoryRecord>();
+        await foreach (var record in memoryDb.GetRecordsByImportBatchIdAsync(
+            indexName, importBatchId, limit, withEmbeddings, cancellationToken))
+        {
+            result.Add(record);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Gets the schema for a specific record.
+    /// </summary>
+    /// <param name="indexName">The index name.</param>
+    /// <param name="recordId">The record ID.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The schema, or null if not found.</returns>
+    public async Task<TabularDataSchema?> GetSchemaForRecordAsync(
+        string indexName,
+        string recordId,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the memory DB instance
+        var memoryDb = GetTabularMemoryDb();
+
+        // Get schema for record
+        return await memoryDb.GetSchemaForRecordAsync(indexName, recordId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Validates parameters against a schema.
     /// </summary>
     /// <param name="datasetName">The dataset name.</param>
