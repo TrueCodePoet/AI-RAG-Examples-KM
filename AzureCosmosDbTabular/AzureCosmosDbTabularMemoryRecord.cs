@@ -358,8 +358,8 @@ internal class AzureCosmosDbTabularMemoryRecord
     // Regular expression for extracting worksheet name and row number
     private static readonly Regex s_worksheetRowRegex = new(@"Record from worksheet ([^,]+), row (\d+):", RegexOptions.Compiled);
     
-    // Regular expression for extracting key-value pairs
-    private static readonly Regex s_keyValueRegex = new(@"([^.]+) is ([^.]+)\.", RegexOptions.Compiled);
+    // Regular expression for extracting key-value pairs - more specific to avoid matching prefixes
+    private static readonly Regex s_keyValueRegex = new(@"(?<!\bRecord from worksheet [^,]+, row \d+: )([^.:\s]+) is ([^.]+)\.", RegexOptions.Compiled);
     
     // Parse text in the sentence format: "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
     private static void ParseSentenceFormat(string text, Dictionary<string, object> data, Dictionary<string, string> source)
@@ -386,15 +386,28 @@ internal class AzureCosmosDbTabularMemoryRecord
                     string dataSection = text.Substring(colonIndex + 1).Trim();
                     Console.WriteLine($"ParseSentenceFormat: Isolated data section: {dataSection.Substring(0, Math.Min(100, dataSection.Length))}...");
                     
-                    // Extract key-value pairs using regex ONLY on the data section
-                    var keyValueMatches = s_keyValueRegex.Matches(dataSection + "."); // Add a trailing period to match the last pair
+                    // Process the data section manually to avoid regex issues
+                    string[] pairs = dataSection.Split(new[] { ". " }, StringSplitOptions.RemoveEmptyEntries);
+                    Console.WriteLine($"ParseSentenceFormat: Split data section into {pairs.Length} key-value pairs");
                     
-                    foreach (Match match in keyValueMatches)
+                    foreach (string pair in pairs)
                     {
-                        if (match.Groups.Count >= 3)
+                        string trimmedPair = pair.Trim();
+                        if (string.IsNullOrEmpty(trimmedPair)) continue;
+                        
+                        // Add a period if it's missing (for the last pair)
+                        if (!trimmedPair.EndsWith("."))
                         {
-                            string key = match.Groups[1].Value.Trim();
-                            string valueStr = match.Groups[2].Value.Trim();
+                            trimmedPair += ".";
+                        }
+                        
+                        // Extract key and value using simple string operations
+                        int isIndex = trimmedPair.IndexOf(" is ");
+                        if (isIndex > 0)
+                        {
+                            string key = trimmedPair.Substring(0, isIndex).Trim();
+                            // Remove the trailing period from the value
+                            string valueStr = trimmedPair.Substring(isIndex + 4).TrimEnd('.').Trim();
                             
                             // Special handling for schema_id and import_batch_id
                             if (key.Equals("schema_id", StringComparison.OrdinalIgnoreCase))
@@ -409,10 +422,18 @@ internal class AzureCosmosDbTabularMemoryRecord
                             }
                             else
                             {
-                                // Convert value to appropriate type for regular data fields
-                                object value = ConvertToTypedValue(valueStr);
-                                data[key] = value;
-                                Console.WriteLine($"ParseSentenceFormat: Added {key}={valueStr} to data dictionary");
+                                // Skip keys that look like record prefixes
+                                if (!key.StartsWith("record from worksheet", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Convert value to appropriate type for regular data fields
+                                    object value = ConvertToTypedValue(valueStr);
+                                    data[key] = value;
+                                    Console.WriteLine($"ParseSentenceFormat: Added {key}={valueStr} to data dictionary");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"ParseSentenceFormat: Skipping key that looks like a record prefix: {key}");
+                                }
                             }
                         }
                     }
