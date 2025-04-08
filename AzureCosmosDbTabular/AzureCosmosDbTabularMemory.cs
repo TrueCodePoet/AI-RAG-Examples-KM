@@ -204,30 +204,33 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         string importBatchId = string.Empty;
         
         // Extract schema ID and import batch ID from the text field in the payload
-        if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
+        string recordText = string.Empty;
+        if (record.Payload.TryGetValue("text", out var recordTextObj) && recordTextObj is string textValue && !string.IsNullOrEmpty(textValue))
         {
+            recordText = textValue;
+            
             // Extract schema ID from text
-            int schemaIdStart = text.IndexOf("schema_id is ");
+            int schemaIdStart = recordText.IndexOf("schema_id is ");
             if (schemaIdStart >= 0)
             {
                 schemaIdStart += "schema_id is ".Length;
-                int schemaIdEnd = text.IndexOf(".", schemaIdStart);
+                int schemaIdEnd = recordText.IndexOf(".", schemaIdStart);
                 if (schemaIdEnd > schemaIdStart)
                 {
-                    schemaId = text.Substring(schemaIdStart, schemaIdEnd - schemaIdStart);
+                    schemaId = recordText.Substring(schemaIdStart, schemaIdEnd - schemaIdStart);
                     Console.WriteLine($"UpsertAsync: Extracted schema ID={schemaId} from text");
                 }
             }
             
             // Extract import batch ID from text
-            int importBatchIdStart = text.IndexOf("import_batch_id is ");
+            int importBatchIdStart = recordText.IndexOf("import_batch_id is ");
             if (importBatchIdStart >= 0)
             {
                 importBatchIdStart += "import_batch_id is ".Length;
-                int importBatchIdEnd = text.IndexOf(".", importBatchIdStart);
+                int importBatchIdEnd = recordText.IndexOf(".", importBatchIdStart);
                 if (importBatchIdEnd > importBatchIdStart)
                 {
-                    importBatchId = text.Substring(importBatchIdStart, importBatchIdEnd - importBatchIdStart);
+                    importBatchId = recordText.Substring(importBatchIdStart, importBatchIdEnd - importBatchIdStart);
                     Console.WriteLine($"UpsertAsync: Extracted import batch ID={importBatchId} from text");
                 }
             }
@@ -324,21 +327,22 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         Dictionary<string, string> sourceInfo = new();
         
         // Extract source information from the text field in the payload
-        if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
+        // We already have the text in recordText, so we can reuse it
+        if (!string.IsNullOrEmpty(recordText))
         {
             // Check if text is in the format "Record from worksheet SheetName, row 123: ..."
-            if (text.StartsWith("Record from worksheet"))
+            if (recordText.StartsWith("Record from worksheet"))
             {
-                int worksheetStart = text.IndexOf("Record from worksheet ") + "Record from worksheet ".Length;
-                int rowStart = text.IndexOf(", row ");
+                int worksheetStart = recordText.IndexOf("Record from worksheet ") + "Record from worksheet ".Length;
+                int rowStart = recordText.IndexOf(", row ");
                 if (rowStart > worksheetStart)
                 {
-                    string worksheet = text.Substring(worksheetStart, rowStart - worksheetStart);
+                    string worksheet = recordText.Substring(worksheetStart, rowStart - worksheetStart);
                     
-                    int rowEnd = text.IndexOf(":", rowStart);
+                    int rowEnd = recordText.IndexOf(":", rowStart);
                     if (rowEnd > rowStart)
                     {
-                        string rowStr = text.Substring(rowStart + ", row ".Length, rowEnd - (rowStart + ", row ".Length));
+                        string rowStr = recordText.Substring(rowStart + ", row ".Length, rowEnd - (rowStart + ", row ".Length));
                         if (int.TryParse(rowStr, out int rowNum))
                         {
                             sourceInfo["_worksheet"] = worksheet;
