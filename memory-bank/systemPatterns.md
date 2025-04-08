@@ -103,6 +103,8 @@ flowchart TD
    - Contains both vector embeddings and structured data
    - Maintains relationships between fields
    - Uses special metadata tags to distinguish between regular records and schema records
+   - Implements robust parsing logic (`ParseSentenceFormat`) that extracts worksheet, row, schema ID, import batch ID, and key-value pairs from the `MemoryRecord.Payload["text"]` field
+   - Uses a combination of regex for the prefix extraction and manual string splitting/parsing for the data section to ensure reliable data extraction
 
 3. **TabularDataSchema**
    - Represents the schema for a tabular dataset
@@ -115,7 +117,8 @@ flowchart TD
    - Specialized decoder for Excel files.
    - Preserves tabular structure and data types.
    - Converts worksheets to structured records (one chunk per row).
-   - Generates chunk text content in a specific "sentence format" (e.g., "Record from worksheet Sheet1, row 123: Column1 is Value1...") which is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the structured `Data` and `Source` fields in the database record.
+   - Generates chunk text content in a specific "sentence format" (e.g., "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2.") which is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the structured `Data` and `Source` fields in the database record.
+   - This specific text format is critical as it's the primary mechanism for transferring structured data through the memory pipeline.
 
 2. **TabularFilterHelper**
    - Assists with generating filters for tabular data

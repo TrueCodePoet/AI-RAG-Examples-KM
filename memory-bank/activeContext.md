@@ -24,6 +24,7 @@ The project is currently focused on implementing and testing the tabular data pr
 - Fixed source dictionary extraction to properly parse text field for metadata
 - Enhanced schema ID and import batch ID extraction from text field
 - Fixed data dictionary population to properly deserialize tabular_data field
+- Refined the `ParseSentenceFormat` method in `AzureCosmosDbTabularMemoryRecord` to correctly handle the text format and avoid parsing artifacts
 
 ### Query Processing
 - Enhanced KernelMemoryQueryProcessor with filter generation capabilities
@@ -57,8 +58,7 @@ The project is currently focused on implementing and testing the tabular data pr
 2. **Custom Excel Processing**: Chose to implement a specialized Excel decoder rather than using the standard one to better preserve tabular structure.
 3. **Filter Generation Approach**: Opted for an AI-driven approach to filter generation rather than a rule-based system for greater flexibility.
 4. **Single Container for Schema and Data**: Decided to store schema information in the same container as the data for simplicity and improved data locality.
-5. **Text Field Parsing**: Implemented a robust approach to extract metadata (worksheet, row, schema ID, import batch ID) from the text field first, with fallbacks to other sources.
-6. **Tabular Data Deserialization**: Prioritized direct deserialization of the tabular_data field over text parsing to ensure accurate data representation.
+5. **Text Field Parsing**: Implemented a robust approach to extract all data (metadata and row data) from the text field using a combination of regex for the prefix and manual string splitting/parsing for the data section.
 
 ### Open Questions
 1. **Scaling Strategy**: How to efficiently scale the system for very large datasets?

@@ -43,29 +43,33 @@
 - Data types are preserved when PreserveDataTypes = true
 - Headers are normalized to remove special characters
 - Each row becomes a separate memory record with preserved structure in the `Data` field.
-- Text representation follows the format "Record from worksheet X, row Y: Column1 is Value1. Column2 is Value2." This specific format is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the `Data` and `Source` fields; changes require synchronization between the decoder and the record class.
+- Text representation follows the format "Record from worksheet X, row Y: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2." This specific format is parsed by `AzureCosmosDbTabularMemoryRecord` to populate the `Data` and `Source` fields; changes require synchronization between the decoder and the record class.
+- The `ParseSentenceFormat` method in `AzureCosmosDbTabularMemoryRecord` uses a combination of regex for the prefix extraction and manual string splitting/parsing for the data section to ensure reliable data extraction.
 - Schema information is extracted during import and stored in the same container as the data, with special metadata tags to identify schema documents.
 - PivotTable structures in Excel files are now handled gracefully with the SkipPivotTables configuration option (default: true).
 
 ### Metadata Extraction
 - The TabularExcelDecoder generates text in a specific format that includes metadata about the record:
   - "Record from worksheet SheetName, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
-- AzureCosmosDbTabularMemory parses this text to extract metadata:
-  1. First tries to extract worksheet name, row number, schema ID, and import batch ID from the text field
-  2. Falls back to checking payload fields if not found in text
-  3. Uses consistent variable naming to avoid compilation errors
-- This approach ensures all metadata is properly included in the Cosmos DB documents
+- AzureCosmosDbTabularMemoryRecord parses this text to extract both metadata and row data:
+  1. Uses regex to extract the worksheet name and row number from the prefix
+  2. Isolates the data section (everything after the colon)
+  3. Splits the data section by periods to identify individual key-value pairs
+  4. Processes each pair to extract the key and value
+  5. Special handling for schema_id and import_batch_id to store them in the source dictionary
+  6. Skips keys that look like record prefixes to avoid parsing artifacts
+- This approach ensures all metadata and row data are properly extracted from the text field
 - When modifying either component, ensure the text format and parsing logic remain synchronized
 
 ### Data Deserialization
-- The TabularExcelDecoder serializes row data to JSON in the "tabular_data" field of the chunk metadata
-- AzureCosmosDbTabularMemoryRecord deserializes this data in the following order:
-  1. First tries to deserialize the "tabular_data" field directly from the payload
-  2. If successful, populates the Data dictionary with the deserialized data
-  3. Falls back to parsing the text field if tabular_data deserialization fails
-  4. Uses the provided data parameter as a final fallback
-- This ensures the memory row holds the actual data with correct fields and values
-- When modifying the serialization format, ensure the deserialization logic is updated accordingly
+- The TabularExcelDecoder encodes row data in the text field using the "sentence format"
+- AzureCosmosDbTabularMemoryRecord extracts this data through the `ParseSentenceFormat` method:
+  1. Parses the text field to extract both metadata and row data
+  2. Uses the same parsing logic described in the "Metadata Extraction" section
+  3. Converts string values to appropriate types (boolean, integer, double, or string)
+  4. Populates the Data dictionary with the extracted key-value pairs
+- This approach ensures the memory row holds the actual data with correct fields and values
+- When modifying the text format in TabularExcelDecoder, ensure the parsing logic in AzureCosmosDbTabularMemoryRecord is updated accordingly
 
 ### Filter Generation
 - Natural language queries are analyzed to extract structured filters
@@ -163,11 +167,14 @@
 - It also implements fallbacks to check payload fields if not found in text
 - If you encounter this issue, ensure you're using the latest version of the code
 
-#### "Empty data dictionary"
-- This issue has been fixed by implementing proper deserialization of the tabular_data field
-- The code now deserializes the tabular_data field directly from the payload
-- It falls back to text parsing if tabular_data deserialization fails
-- If you encounter this issue, ensure you're using the latest version of the code
+#### "Empty data dictionary" or "Data parsing artifacts"
+- These issues have been fixed by improving the text field parsing in `ParseSentenceFormat`
+- The code now uses a more robust approach to extract data from the text field:
+  1. Isolates the data section (everything after the colon)
+  2. Splits the data section by periods to identify individual key-value pairs
+  3. Processes each pair to extract the key and value
+  4. Skips keys that look like record prefixes to avoid parsing artifacts
+- If you encounter these issues, ensure you're using the latest version of the code
 
 #### "Azure service errors"
 - Verify that all API keys and endpoints are correctly configured.
