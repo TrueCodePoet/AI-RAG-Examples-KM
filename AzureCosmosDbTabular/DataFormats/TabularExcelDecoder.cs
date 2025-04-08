@@ -394,8 +394,10 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         ["_rowNumber"] = rowNumber.ToString(),  // Add with underscore prefix for source dictionary
                     };
 
-                    // Use a custom metadata field that won't be modified by the pipeline
-                    metadata["__custom_tabular_data"] = JsonSerializer.Serialize(rowData, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
+                    // Serialize the row data and add it to the metadata
+                    // We'll extract it in FromMemoryRecord and add it to the Tags collection there
+                    var serializedData = JsonSerializer.Serialize(rowData, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
+                    metadata["__custom_tabular_data"] = serializedData;
 
                     // Add dataset name if provided
                     if (!string.IsNullOrEmpty(this._datasetName))
@@ -421,7 +423,10 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     // This is used for embedding/semantic search relevance
                     var chunkText = $"Record from worksheet {worksheetName}, row {rowNumber}.";
                     Console.WriteLine($"TabularExcelDecoder: Created chunk with text: {chunkText.Substring(0, Math.Min(100, chunkText.Length))}...");
-                    result.Sections.Add(new Chunk(chunkText, chunkNumber, metadata)); // Trim potential trailing space
+                    
+                    // Create the chunk with text, number, and metadata
+                    var chunk = new Chunk(chunkText, chunkNumber, metadata);
+                    result.Sections.Add(chunk);
                 }
             }
         } // End using workbook

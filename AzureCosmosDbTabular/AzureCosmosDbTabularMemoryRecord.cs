@@ -240,19 +240,21 @@ internal class AzureCosmosDbTabularMemoryRecord
             Console.WriteLine($"FromMemoryRecord: Extracted row number from metadata: {rowNumber}");
         }
 
-        // Only try to extract tabular data from the custom field
-        if (record.Payload.TryGetValue("__custom_tabular_data", out var customTabularDataObj) && customTabularDataObj is string customTabularDataStr)
+        // Try to extract tabular data from the custom field in the Payload
+        if (record.Payload.TryGetValue("__custom_tabular_data", out var customTabularDataObj) && 
+            customTabularDataObj is string serializedData && 
+            !string.IsNullOrEmpty(serializedData))
         {
             try
             {
                 var deserializedData = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                    customTabularDataStr, 
+                    serializedData, 
                     AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
                 
                 if (deserializedData != null && deserializedData.Count > 0)
                 {
                     extractedData = deserializedData;
-                    Console.WriteLine($"FromMemoryRecord: Successfully deserialized __custom_tabular_data with {extractedData.Count} fields");
+                    Console.WriteLine($"FromMemoryRecord: Successfully deserialized data from __custom_tabular_data with {extractedData.Count} fields");
                     
                     // If we found tabular data, also check for schema_id and import_batch_id in it
                     if (string.IsNullOrEmpty(extractedSchemaId) && extractedData.TryGetValue("schema_id", out var dataSchemaId))
@@ -270,7 +272,7 @@ internal class AzureCosmosDbTabularMemoryRecord
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WARN: Failed to deserialize __custom_tabular_data for record {record.Id}: {ex.Message}");
+                Console.WriteLine($"WARN: Failed to deserialize data from __custom_tabular_data for record {record.Id}: {ex.Message}");
             }
         }
 
@@ -306,13 +308,24 @@ internal class AzureCosmosDbTabularMemoryRecord
             Console.WriteLine($"FromMemoryRecord: Added import batch ID to source dictionary: {finalImportBatchId}");
         }
 
+        // Create a new tags collection and copy items from the original one
+        var tagsCopy = new TagCollection();
+        foreach (var tag in record.Tags)
+        {
+            // Skip the temporary data transfer tag
+            if (tag.Key != "__custom_tabular_data_tag")
+            {
+                tagsCopy.Add(tag.Key, tag.Value);
+            }
+        }
+        
         // Create a single record instance with all the data
         var memoryRecord = new AzureCosmosDbTabularMemoryRecord
         {
             Id = id,
             File = fileId,
             Payload = new Dictionary<string, object>(record.Payload), // Create a copy to allow modification
-            Tags = record.Tags,
+            Tags = tagsCopy, // Use the modified tags collection without the temporary tag
             // Vector assignment remains unchanged
             Vector = record.Vector.Data.ToArray(),
             Data = finalData,
