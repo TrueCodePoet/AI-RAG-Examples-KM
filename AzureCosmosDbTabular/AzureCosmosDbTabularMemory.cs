@@ -291,15 +291,44 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         // Create a source dictionary with worksheet and row information
         Dictionary<string, string> sourceInfo = new();
         
-        // Extract worksheet and row number from payload if available
-        if (record.Payload.TryGetValue("worksheetName", out var worksheetNameObj) && worksheetNameObj is string worksheetName)
+        // Extract source information from the text field in the payload
+        if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
         {
-            sourceInfo["_worksheet"] = worksheetName;
+            // Check if text is in the format "Record from worksheet SheetName, row 123: ..."
+            if (text.StartsWith("Record from worksheet"))
+            {
+                int worksheetStart = text.IndexOf("Record from worksheet ") + "Record from worksheet ".Length;
+                int rowStart = text.IndexOf(", row ");
+                if (rowStart > worksheetStart)
+                {
+                    string worksheet = text.Substring(worksheetStart, rowStart - worksheetStart);
+                    
+                    int rowEnd = text.IndexOf(":", rowStart);
+                    if (rowEnd > rowStart)
+                    {
+                        string rowStr = text.Substring(rowStart + ", row ".Length, rowEnd - (rowStart + ", row ".Length));
+                        if (int.TryParse(rowStr, out int rowNum))
+                        {
+                            sourceInfo["_worksheet"] = worksheet;
+                            sourceInfo["_rowNumber"] = rowNum.ToString();
+                            Console.WriteLine($"UpsertAsync: Extracted worksheet={worksheet}, rowNumber={rowNum} from text");
+                        }
+                    }
+                }
+            }
         }
         
-        if (record.Payload.TryGetValue("rowNumber", out var rowNumberObj) && rowNumberObj is string rowNumber)
+        // Try to extract from metadata if not found in text
+        if (!sourceInfo.ContainsKey("_worksheet") && record.Payload.TryGetValue("worksheetName", out var worksheetNameObj) && worksheetNameObj is string worksheetName)
+        {
+            sourceInfo["_worksheet"] = worksheetName;
+            Console.WriteLine($"UpsertAsync: Extracted worksheet={worksheetName} from metadata");
+        }
+        
+        if (!sourceInfo.ContainsKey("_rowNumber") && record.Payload.TryGetValue("rowNumber", out var rowNumberObj) && rowNumberObj is string rowNumber)
         {
             sourceInfo["_rowNumber"] = rowNumber;
+            Console.WriteLine($"UpsertAsync: Extracted rowNumber={rowNumber} from metadata");
         }
         
         // Add schema ID and import batch ID to source info
