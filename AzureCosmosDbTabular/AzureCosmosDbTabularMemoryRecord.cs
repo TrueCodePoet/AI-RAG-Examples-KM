@@ -297,9 +297,9 @@ internal class AzureCosmosDbTabularMemoryRecord
             }
         }
 
-        // Use provided data/source parameters as fallback if available
-        var finalData = data ?? extractedData;
-        var finalSource = source ?? extractedSource;
+        // Prioritize extracted data, use parameter as fallback ONLY if extractedData is empty
+        var finalData = (extractedData.Count > 0) ? extractedData : (data ?? new Dictionary<string, object>());
+        var finalSource = (extractedSource.Count > 0) ? extractedSource : (source ?? new Dictionary<string, string>());
 
         // Log the provided schema ID and import batch ID
         if (!string.IsNullOrEmpty(schemaId))
