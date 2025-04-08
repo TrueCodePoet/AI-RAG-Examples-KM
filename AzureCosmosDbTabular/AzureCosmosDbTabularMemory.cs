@@ -203,21 +203,53 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         string schemaId = string.Empty;
         string importBatchId = string.Empty;
         
-        // Check for schema ID and import batch ID in the record's payload
-        if (record.Payload.TryGetValue("schema_id", out var schemaIdValue) && 
+        // Extract schema ID and import batch ID from the text field in the payload
+        if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
+        {
+            // Extract schema ID from text
+            int schemaIdStart = text.IndexOf("schema_id is ");
+            if (schemaIdStart >= 0)
+            {
+                schemaIdStart += "schema_id is ".Length;
+                int schemaIdEnd = text.IndexOf(".", schemaIdStart);
+                if (schemaIdEnd > schemaIdStart)
+                {
+                    schemaId = text.Substring(schemaIdStart, schemaIdEnd - schemaIdStart);
+                    Console.WriteLine($"UpsertAsync: Extracted schema ID={schemaId} from text");
+                }
+            }
+            
+            // Extract import batch ID from text
+            int importBatchIdStart = text.IndexOf("import_batch_id is ");
+            if (importBatchIdStart >= 0)
+            {
+                importBatchIdStart += "import_batch_id is ".Length;
+                int importBatchIdEnd = text.IndexOf(".", importBatchIdStart);
+                if (importBatchIdEnd > importBatchIdStart)
+                {
+                    importBatchId = text.Substring(importBatchIdStart, importBatchIdEnd - importBatchIdStart);
+                    Console.WriteLine($"UpsertAsync: Extracted import batch ID={importBatchId} from text");
+                }
+            }
+        }
+        
+        // Fallback: Check for schema ID and import batch ID in the record's payload
+        if (string.IsNullOrEmpty(schemaId) && 
+            record.Payload.TryGetValue("schema_id", out var schemaIdValue) && 
             schemaIdValue is string schemaIdStr && 
             !string.IsNullOrEmpty(schemaIdStr))
         {
             schemaId = schemaIdStr;
-            this._logger.LogDebug("Found schema ID {SchemaId} in record payload", schemaId);
+            Console.WriteLine($"UpsertAsync: Found schema ID {schemaId} in record payload");
         }
         
-        if (record.Payload.TryGetValue("import_batch_id", out var importBatchIdValue) && 
+        if (string.IsNullOrEmpty(importBatchId) && 
+            record.Payload.TryGetValue("import_batch_id", out var importBatchIdValue) && 
             importBatchIdValue is string importBatchIdStr && 
             !string.IsNullOrEmpty(importBatchIdStr))
         {
             importBatchId = importBatchIdStr;
-            this._logger.LogDebug("Found import batch ID {ImportBatchId} in record payload", importBatchId);
+            Console.WriteLine($"UpsertAsync: Found import batch ID {importBatchId} in record payload");
         }
 
         // Extract tabular data from the record
