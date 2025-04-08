@@ -394,10 +394,46 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         ["_rowNumber"] = rowNumber.ToString(),  // Add with underscore prefix for source dictionary
                     };
 
-                    // Serialize the row data and add it to the metadata
-                    // We'll extract it in FromMemoryRecord and add it to the Tags collection there
-                    var serializedData = JsonSerializer.Serialize(rowData, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
-                    metadata["__custom_tabular_data"] = serializedData;
+                    // Create a detailed text representation of the row data
+                    // This will be used for embedding/semantic search relevance AND for data extraction
+                    var textBuilder = new StringBuilder();
+                    textBuilder.Append($"Record from worksheet {worksheetName}, row {rowNumber}: ");
+                    
+                    // Add schema ID and import batch ID first if available
+                    if (!string.IsNullOrEmpty(schemaId))
+                    {
+                        textBuilder.Append($"schema_id is {schemaId}. ");
+                    }
+                    
+                    if (!string.IsNullOrEmpty(importBatchId))
+                    {
+                        textBuilder.Append($"import_batch_id is {importBatchId}. ");
+                    }
+                    
+                    // Add all row data as key-value pairs
+                    foreach (var kvp in rowData)
+                    {
+                        // Skip metadata fields that are already included above
+                        if (kvp.Key == "schema_id" || kvp.Key == "import_batch_id")
+                        {
+                            continue;
+                        }
+                        
+                        // Skip internal fields that start with underscore
+                        if (kvp.Key.StartsWith("_"))
+                        {
+                            continue;
+                        }
+                        
+                        // Format the value as a string
+                        string valueStr = kvp.Value?.ToString() ?? "NULL";
+                        
+                        // Add the key-value pair to the text
+                        textBuilder.Append($"{kvp.Key} is {valueStr}. ");
+                    }
+                    
+                    // Use the detailed text for the chunk
+                    var chunkText = textBuilder.ToString().TrimEnd();
 
                     // Add dataset name if provided
                     if (!string.IsNullOrEmpty(this._datasetName))
@@ -419,9 +455,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to chunk metadata: {importBatchId}");
                     }
 
-                    // Create a simplified text representation - just enough to identify the record source
-                    // This is used for embedding/semantic search relevance
-                    var chunkText = $"Record from worksheet {worksheetName}, row {rowNumber}.";
+                    // Log the chunk text
                     Console.WriteLine($"TabularExcelDecoder: Created chunk with text: {chunkText.Substring(0, Math.Min(100, chunkText.Length))}...");
                     
                     // Create the chunk with text, number, and metadata

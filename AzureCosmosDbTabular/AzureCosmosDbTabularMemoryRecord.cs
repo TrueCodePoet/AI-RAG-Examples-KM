@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.MemoryStorage;
@@ -240,40 +241,28 @@ internal class AzureCosmosDbTabularMemoryRecord
             Console.WriteLine($"FromMemoryRecord: Extracted row number from metadata: {rowNumber}");
         }
 
-        // Try to extract tabular data from the custom field in the Payload
-        if (record.Payload.TryGetValue("__custom_tabular_data", out var customTabularDataObj) && 
-            customTabularDataObj is string serializedData && 
-            !string.IsNullOrEmpty(serializedData))
+        // Extract tabular data from the text field in the payload
+        if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
         {
-            try
+            Console.WriteLine($"FromMemoryRecord: Parsing text field for record {record.Id}");
+            
+            // Parse the text field to extract tabular data
+            ParseSentenceFormat(text, extractedData, extractedSource);
+            
+            // Extract schema ID and import batch ID from the source dictionary if they were parsed
+            if (string.IsNullOrEmpty(extractedSchemaId) && extractedSource.TryGetValue("schema_id", out var parsedSchemaId))
             {
-                var deserializedData = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                    serializedData, 
-                    AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
-                
-                if (deserializedData != null && deserializedData.Count > 0)
-                {
-                    extractedData = deserializedData;
-                    Console.WriteLine($"FromMemoryRecord: Successfully deserialized data from __custom_tabular_data with {extractedData.Count} fields");
-                    
-                    // If we found tabular data, also check for schema_id and import_batch_id in it
-                    if (string.IsNullOrEmpty(extractedSchemaId) && extractedData.TryGetValue("schema_id", out var dataSchemaId))
-                    {
-                        extractedSchemaId = dataSchemaId?.ToString() ?? string.Empty;
-                        Console.WriteLine($"FromMemoryRecord: Extracted schema ID from __custom_tabular_data: {extractedSchemaId}");
-                    }
-                    
-                    if (string.IsNullOrEmpty(extractedImportBatchId) && extractedData.TryGetValue("import_batch_id", out var dataImportBatchId))
-                    {
-                        extractedImportBatchId = dataImportBatchId?.ToString() ?? string.Empty;
-                        Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from __custom_tabular_data: {extractedImportBatchId}");
-                    }
-                }
+                extractedSchemaId = parsedSchemaId;
+                Console.WriteLine($"FromMemoryRecord: Extracted schema ID from text: {extractedSchemaId}");
             }
-            catch (Exception ex)
+            
+            if (string.IsNullOrEmpty(extractedImportBatchId) && extractedSource.TryGetValue("import_batch_id", out var parsedImportBatchId))
             {
-                Console.WriteLine($"WARN: Failed to deserialize data from __custom_tabular_data for record {record.Id}: {ex.Message}");
+                extractedImportBatchId = parsedImportBatchId;
+                Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from text: {extractedImportBatchId}");
             }
+            
+            Console.WriteLine($"FromMemoryRecord: Extracted {extractedData.Count} data fields from text");
         }
 
         // Prioritize extracted data, use parameter as fallback ONLY if extractedData is empty
@@ -366,40 +355,46 @@ internal class AzureCosmosDbTabularMemoryRecord
         return Encoding.UTF8.GetString(bytes);
     }
 
-    // Parse text in the new sentence format: "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
+    // Regular expression for extracting worksheet name and row number
+    private static readonly Regex s_worksheetRowRegex = new(@"Record from worksheet ([^,]+), row (\d+):", RegexOptions.Compiled);
+    
+    // Regular expression for extracting key-value pairs
+    private static readonly Regex s_keyValueRegex = new(@"([^.]+) is ([^.]+)\.", RegexOptions.Compiled);
+    
+    // Parse text in the sentence format: "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
     private static void ParseSentenceFormat(string text, Dictionary<string, object> data, Dictionary<string, string> source)
     {
-        // Extract worksheet and row info
-        int worksheetStart = text.IndexOf("Record from worksheet ") + "Record from worksheet ".Length;
-        int rowStart = text.IndexOf(", row ");
-        if (rowStart > worksheetStart)
+        Console.WriteLine($"ParseSentenceFormat: Parsing text: {text.Substring(0, Math.Min(100, text.Length))}...");
+        
+        // Extract worksheet name and row number using regex
+        var worksheetRowMatch = s_worksheetRowRegex.Match(text);
+        if (worksheetRowMatch.Success)
         {
-            string worksheet = text.Substring(worksheetStart, rowStart - worksheetStart);
-
-            int rowEnd = text.IndexOf(":", rowStart);
-            if (rowEnd > rowStart)
+            string worksheet = worksheetRowMatch.Groups[1].Value.Trim();
+            string rowStr = worksheetRowMatch.Groups[2].Value.Trim();
+            
+            if (int.TryParse(rowStr, out int rowNum))
             {
-                string rowStr = text.Substring(rowStart + ", row ".Length, rowEnd - (rowStart + ", row ".Length));
-                if (int.TryParse(rowStr, out int rowNum))
+                source["_worksheet"] = worksheet;
+                source["_rowNumber"] = rowNum.ToString();
+                Console.WriteLine($"ParseSentenceFormat: Extracted worksheet={worksheet}, row={rowNum}");
+                
+                // Extract the data section (everything after the colon)
+                int colonIndex = text.IndexOf(':');
+                if (colonIndex > 0)
                 {
-                    source["_worksheet"] = worksheet;
-                    source["_rowNumber"] = rowNum.ToString();
-
-                    // Now parse the column data
-                    string dataSection = text.Substring(rowEnd + 1).Trim();
-                    string[] pairs = dataSection.Split('.');
-
-                    foreach (string pair in pairs)
+                    string dataSection = text.Substring(colonIndex + 1).Trim();
+                    
+                    // Extract key-value pairs using regex
+                    var keyValueMatches = s_keyValueRegex.Matches(dataSection + "."); // Add a trailing period to match the last pair
+                    
+                    foreach (Match match in keyValueMatches)
                     {
-                        string trimmed = pair.Trim();
-                        if (string.IsNullOrEmpty(trimmed)) continue;
-
-                        int isIndex = trimmed.IndexOf(" is ");
-                        if (isIndex > 0)
+                        if (match.Groups.Count >= 3)
                         {
-                            string key = trimmed.Substring(0, isIndex).Trim();
-                            string valueStr = trimmed.Substring(isIndex + " is ".Length).Trim();
-
+                            string key = match.Groups[1].Value.Trim();
+                            string valueStr = match.Groups[2].Value.Trim();
+                            
                             // Special handling for schema_id and import_batch_id
                             if (key.Equals("schema_id", StringComparison.OrdinalIgnoreCase))
                             {
@@ -425,6 +420,10 @@ internal class AzureCosmosDbTabularMemoryRecord
                     Console.WriteLine($"ParseSentenceFormat: Data dictionary now contains {data.Count} fields");
                 }
             }
+        }
+        else
+        {
+            Console.WriteLine($"ParseSentenceFormat: Failed to match worksheet and row pattern in text");
         }
     }
 
