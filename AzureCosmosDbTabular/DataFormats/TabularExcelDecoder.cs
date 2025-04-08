@@ -371,12 +371,14 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     {
                         // Add to the row data to ensure it gets into the payload
                         rowData["schema_id"] = schemaId;
+                        Console.WriteLine($"Adding schema ID to row data: {schemaId}");
                     }
                     
                     if (!string.IsNullOrEmpty(importBatchId))
                     {
                         // Add to the row data to ensure it gets into the payload
                         rowData["import_batch_id"] = importBatchId;
+                        Console.WriteLine($"Adding import batch ID to row data: {importBatchId}");
                     }
 
                     // Create a chunk for this row
@@ -398,11 +400,13 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     if (!string.IsNullOrEmpty(schemaId))
                     {
                         metadata["schema_id"] = schemaId;
+                        Console.WriteLine($"Adding schema ID to chunk metadata: {schemaId}");
                     }
                     
                     if (!string.IsNullOrEmpty(importBatchId))
                     {
                         metadata["import_batch_id"] = importBatchId;
+                        Console.WriteLine($"Adding import batch ID to chunk metadata: {importBatchId}");
                     }
 
                     // Create a more descriptive text representation for the chunk content
@@ -485,13 +489,26 @@ public sealed class TabularExcelDecoder : IContentDecoder
     /// <returns>The extracted schema.</returns>
     private TabularDataSchema ExtractSchemaFromWorkbook(XLWorkbook workbook, string datasetName)
     {
+        // Get the source file name from the workbook if available
+        string sourceFileName = "excel_import";
+        if (workbook.Properties.Custom.TryGetValue("FileName", out object fileNameObj) && 
+            fileNameObj is string fileName && 
+            !string.IsNullOrEmpty(fileName))
+        {
+            sourceFileName = Path.GetFileName(fileName);
+            Console.WriteLine($"Using source file name from workbook properties: {sourceFileName}");
+        }
+        
         var schema = new TabularDataSchema
         {
             DatasetName = datasetName,
             ImportDate = DateTime.UtcNow,
-            SourceFile = "excel_import",
+            SourceFile = sourceFileName,
+            File = sourceFileName, // Set File property to source file name for proper partition key
             Columns = new List<SchemaColumn>()
         };
+        
+        Console.WriteLine($"Created schema for dataset {datasetName} with source file {sourceFileName}");
 
         // Process the first worksheet to extract schema
         var worksheet = workbook.Worksheets.FirstOrDefault();

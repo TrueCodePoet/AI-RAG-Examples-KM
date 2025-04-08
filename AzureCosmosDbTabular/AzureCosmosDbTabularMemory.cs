@@ -181,7 +181,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
 
         // Extract source file name from tags if available
         string sourceFileName = "excel_import";
-        if (record.Tags.TryGetValue("source_file", out var sourceFiles) && 
+        if (record.Payload.TryGetValue("file", out var sourceFiles) && 
             sourceFiles != null && 
             sourceFiles.Count > 0)
         {
@@ -219,6 +219,35 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 tabularData = JsonSerializer.Deserialize<Dictionary<string, object>>(
                     tabularDataStr, 
                     AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions) ?? new Dictionary<string, object>();
+                
+                // Check if schema ID and import batch ID are in the deserialized tabular data
+                if (string.IsNullOrEmpty(schemaId) && tabularData.TryGetValue("schema_id", out var tabularSchemaId))
+                {
+                    if (tabularSchemaId is string tabularSchemaIdStr)
+                    {
+                        schemaId = tabularSchemaIdStr;
+                        Console.WriteLine($"Extracted schema ID from tabular data: {schemaId}");
+                    }
+                    else if (tabularSchemaId != null)
+                    {
+                        schemaId = tabularSchemaId.ToString();
+                        Console.WriteLine($"Extracted and converted schema ID from tabular data: {schemaId}");
+                    }
+                }
+                
+                if (string.IsNullOrEmpty(importBatchId) && tabularData.TryGetValue("import_batch_id", out var tabularImportBatchId))
+                {
+                    if (tabularImportBatchId is string tabularImportBatchIdStr)
+                    {
+                        importBatchId = tabularImportBatchIdStr;
+                        Console.WriteLine($"Extracted import batch ID from tabular data: {importBatchId}");
+                    }
+                    else if (tabularImportBatchId != null)
+                    {
+                        importBatchId = tabularImportBatchId.ToString();
+                        Console.WriteLine($"Extracted and converted import batch ID from tabular data: {importBatchId}");
+                    }
+                }
             }
             catch (Exception ex)
             {
