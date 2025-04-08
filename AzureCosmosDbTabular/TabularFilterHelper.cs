@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.Diagnostics;
 using Microsoft.KernelMemory.MemoryStorage;
+using AI_RAG_Examples_KM; // For MemoryHelper
 
 namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 
@@ -330,19 +331,53 @@ public class TabularFilterHelper
     /// <returns>The tabular memory DB instance.</returns>
     private AzureCosmosDbTabularMemory GetTabularMemoryDb()
     {
-        // Get the memory DB instance using reflection
-        var memoryDbField = this._memory.GetType().GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (memoryDbField == null)
+        try
         {
-            throw new InvalidOperationException("Could not access the memory DB instance.");
-        }
+            // First try to get the memory DB instance using the helper method from Program.cs
+            var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(this._memory);
+            if (memoryDb != null)
+            {
+                // Check if it's already an AzureCosmosDbTabularMemory
+                if (memoryDb is AzureCosmosDbTabularMemory tabularMemoryDb)
+                {
+                    return tabularMemoryDb;
+                }
+                
+                // If it's an IMemoryDb but not AzureCosmosDbTabularMemory, try to cast it
+                // This might happen if we're using a proxy or decorator pattern
+                try
+                {
+                    // Try to cast using dynamic to bypass compile-time type checking
+                    dynamic dynamicMemoryDb = memoryDb;
+                    AzureCosmosDbTabularMemory castedMemoryDb = dynamicMemoryDb;
+                    return castedMemoryDb;
+                }
+                catch
+                {
+                    // If dynamic casting fails, fall back to the original method
+                    this._logger.LogWarning("Could not cast IMemoryDb to AzureCosmosDbTabularMemory, falling back to reflection");
+                }
+            }
+            
+            // Fall back to the original reflection method
+            var memoryDbField = this._memory.GetType().GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (memoryDbField == null)
+            {
+                throw new InvalidOperationException("Could not access the memory DB instance.");
+            }
 
-        var memoryDb = memoryDbField.GetValue(this._memory);
-        if (memoryDb is not AzureCosmosDbTabularMemory tabularMemoryDb)
+            var reflectedMemoryDb = memoryDbField.GetValue(this._memory);
+            if (reflectedMemoryDb is not AzureCosmosDbTabularMemory reflectedTabularMemoryDb)
+            {
+                throw new InvalidOperationException("The memory DB is not an AzureCosmosDbTabularMemory instance.");
+            }
+
+            return reflectedTabularMemoryDb;
+        }
+        catch (Exception ex)
         {
-            throw new InvalidOperationException("The memory DB is not an AzureCosmosDbTabularMemory instance.");
+            this._logger.LogError(ex, "Error accessing the memory DB instance");
+            throw new InvalidOperationException("Could not access the memory DB instance.", ex);
         }
-
-        return tabularMemoryDb;
     }
 }
