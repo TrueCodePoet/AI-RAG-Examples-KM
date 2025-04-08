@@ -227,6 +227,19 @@ internal class AzureCosmosDbTabularMemoryRecord
             Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from payload: {extractedImportBatchId}");
         }
 
+        // Extract source information from metadata if available
+        if (record.Payload.TryGetValue("worksheetName", out var worksheetNameObj) && worksheetNameObj is string worksheetName)
+        {
+            extractedSource["_worksheet"] = worksheetName;
+            Console.WriteLine($"FromMemoryRecord: Extracted worksheet name from metadata: {worksheetName}");
+        }
+
+        if (record.Payload.TryGetValue("rowNumber", out var rowNumberObj) && rowNumberObj is string rowNumber)
+        {
+            extractedSource["_rowNumber"] = rowNumber;
+            Console.WriteLine($"FromMemoryRecord: Extracted row number from metadata: {rowNumber}");
+        }
+
         // Extract structured data from the text field in the payload
         if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
         {
@@ -264,6 +277,23 @@ internal class AzureCosmosDbTabularMemoryRecord
             Console.WriteLine($"FromMemoryRecord: Provided import batch ID parameter: {importBatchId}");
         }
 
+        // Determine final schema ID and import batch ID values
+        string finalSchemaId = schemaId ?? extractedSchemaId ?? string.Empty;
+        string finalImportBatchId = importBatchId ?? extractedImportBatchId ?? string.Empty;
+
+        // Add schema ID and import batch ID to source dictionary
+        if (!string.IsNullOrEmpty(finalSchemaId))
+        {
+            finalSource["schema_id"] = finalSchemaId;
+            Console.WriteLine($"FromMemoryRecord: Added schema ID to source dictionary: {finalSchemaId}");
+        }
+
+        if (!string.IsNullOrEmpty(finalImportBatchId))
+        {
+            finalSource["import_batch_id"] = finalImportBatchId;
+            Console.WriteLine($"FromMemoryRecord: Added import batch ID to source dictionary: {finalImportBatchId}");
+        }
+
         // Create a single record instance with all the data
         var memoryRecord = new AzureCosmosDbTabularMemoryRecord
         {
@@ -276,8 +306,8 @@ internal class AzureCosmosDbTabularMemoryRecord
             Data = finalData,
             Source = finalSource,
             // Use provided values first, then extracted values from payload, then empty string
-            SchemaId = schemaId ?? extractedSchemaId ?? string.Empty,
-            ImportBatchId = importBatchId ?? extractedImportBatchId ?? string.Empty
+            SchemaId = finalSchemaId,
+            ImportBatchId = finalImportBatchId
         };
         
         // Log the values that were set on the record

@@ -390,6 +390,8 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     {
                         ["worksheetName"] = worksheetName,
                         ["rowNumber"] = rowNumber.ToString(),
+                        ["_worksheet"] = worksheetName,  // Add with underscore prefix for source dictionary
+                        ["_rowNumber"] = rowNumber.ToString(),  // Add with underscore prefix for source dictionary
                     };
 
                     // Serialize the row data including schema ID and import batch ID

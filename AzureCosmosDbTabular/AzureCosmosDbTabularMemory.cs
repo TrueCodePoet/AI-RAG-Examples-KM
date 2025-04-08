@@ -288,10 +288,36 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         // Log the schema ID and import batch ID before creating the record
         Console.WriteLine($"UpsertAsync: About to create record with schemaId={schemaId}, importBatchId={importBatchId}");
         
+        // Create a source dictionary with worksheet and row information
+        Dictionary<string, string> sourceInfo = new();
+        
+        // Extract worksheet and row number from payload if available
+        if (record.Payload.TryGetValue("worksheetName", out var worksheetNameObj) && worksheetNameObj is string worksheetName)
+        {
+            sourceInfo["_worksheet"] = worksheetName;
+        }
+        
+        if (record.Payload.TryGetValue("rowNumber", out var rowNumberObj) && rowNumberObj is string rowNumber)
+        {
+            sourceInfo["_rowNumber"] = rowNumber;
+        }
+        
+        // Add schema ID and import batch ID to source info
+        if (!string.IsNullOrEmpty(schemaId))
+        {
+            sourceInfo["schema_id"] = schemaId;
+        }
+        
+        if (!string.IsNullOrEmpty(importBatchId))
+        {
+            sourceInfo["import_batch_id"] = importBatchId;
+        }
+        
         // Create the Cosmos DB record from the memory record, including schema ID and import batch ID
         var memoryRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(
             record, 
             data: tabularData,
+            source: sourceInfo,
             schemaId: schemaId, 
             importBatchId: importBatchId);
             
