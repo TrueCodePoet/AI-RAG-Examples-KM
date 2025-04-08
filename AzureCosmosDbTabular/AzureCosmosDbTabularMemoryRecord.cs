@@ -376,7 +376,7 @@ internal class AzureCosmosDbTabularMemoryRecord
         return Encoding.UTF8.GetString(bytes);
     }
 
-    // Parse text in the new sentence format: "Record from worksheet Sheet1, row 123: Column1 is Value1. Column2 is Value2."
+    // Parse text in the new sentence format: "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
     private static void ParseSentenceFormat(string text, Dictionary<string, object> data, Dictionary<string, string> source)
     {
         // Extract worksheet and row info
@@ -410,11 +410,29 @@ internal class AzureCosmosDbTabularMemoryRecord
                             string key = trimmed.Substring(0, isIndex).Trim();
                             string valueStr = trimmed.Substring(isIndex + " is ".Length).Trim();
 
-                            // Convert value to appropriate type
-                            object value = ConvertToTypedValue(valueStr);
-                            data[key] = value;
+                            // Special handling for schema_id and import_batch_id
+                            if (key.Equals("schema_id", StringComparison.OrdinalIgnoreCase))
+                            {
+                                source["schema_id"] = valueStr;
+                                Console.WriteLine($"ParseSentenceFormat: Extracted schema_id={valueStr} to source dictionary");
+                            }
+                            else if (key.Equals("import_batch_id", StringComparison.OrdinalIgnoreCase))
+                            {
+                                source["import_batch_id"] = valueStr;
+                                Console.WriteLine($"ParseSentenceFormat: Extracted import_batch_id={valueStr} to source dictionary");
+                            }
+                            else
+                            {
+                                // Convert value to appropriate type for regular data fields
+                                object value = ConvertToTypedValue(valueStr);
+                                data[key] = value;
+                                Console.WriteLine($"ParseSentenceFormat: Added {key}={valueStr} to data dictionary");
+                            }
                         }
                     }
+                    
+                    // Log the data dictionary contents for debugging
+                    Console.WriteLine($"ParseSentenceFormat: Data dictionary now contains {data.Count} fields");
                 }
             }
         }
