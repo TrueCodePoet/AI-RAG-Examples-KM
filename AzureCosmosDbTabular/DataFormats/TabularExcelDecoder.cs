@@ -394,9 +394,8 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         ["_rowNumber"] = rowNumber.ToString(),  // Add with underscore prefix for source dictionary
                     };
 
-                    // Serialize the row data including schema ID and import batch ID
-                    // This ensures these values are preserved in the payload
-                    metadata["tabular_data"] = JsonSerializer.Serialize(rowData, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
+                    // Use a custom metadata field that won't be modified by the pipeline
+                    metadata["__custom_tabular_data"] = JsonSerializer.Serialize(rowData, AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
 
                     // Add dataset name if provided
                     if (!string.IsNullOrEmpty(this._datasetName))
@@ -418,34 +417,9 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to chunk metadata: {importBatchId}");
                     }
 
-                    // Create a more descriptive text representation for the chunk content
-                    var sb = new StringBuilder();
-                    sb.Append($"Record from worksheet {worksheetName}, row {rowNumber}:");
-                    
-                    // Add schema ID and import batch ID to the text representation as well
-                    // This ensures they're included in the text field which is parsed by FromMemoryRecord
-                    if (!string.IsNullOrEmpty(schemaId))
-                    {
-                        sb.Append($" schema_id is {schemaId}.");
-                    }
-                    
-                    if (!string.IsNullOrEmpty(importBatchId))
-                    {
-                        sb.Append($" import_batch_id is {importBatchId}.");
-                    }
-                    
-                    foreach (var kvp in rowData)
-                    {
-                        // Skip internal metadata fields and the schema/import batch fields we already added
-                        if (kvp.Key.StartsWith("_") || 
-                            kvp.Key == "schema_id" || 
-                            kvp.Key == "import_batch_id") continue;
-
-                        // Append as " Key is Value." - adjust phrasing as needed
-                        sb.Append($" {kvp.Key} is {kvp.Value?.ToString() ?? "NULL"}.");
-                    }
-
-                    var chunkText = sb.ToString().Trim();
+                    // Create a simplified text representation - just enough to identify the record source
+                    // This is used for embedding/semantic search relevance
+                    var chunkText = $"Record from worksheet {worksheetName}, row {rowNumber}.";
                     Console.WriteLine($"TabularExcelDecoder: Created chunk with text: {chunkText.Substring(0, Math.Min(100, chunkText.Length))}...");
                     result.Sections.Add(new Chunk(chunkText, chunkNumber, metadata)); // Trim potential trailing space
                 }

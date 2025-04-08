@@ -255,15 +255,15 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             Console.WriteLine($"UpsertAsync: Found import batch ID {importBatchId} in record payload");
         }
 
-        // Extract tabular data from the record
+        // Extract tabular data from the custom field
         Dictionary<string, object> tabularData = new();
-        if (record.Payload.TryGetValue("tabular_data", out var tabularDataObj) && 
-            tabularDataObj is string tabularDataStr)
+        if (record.Payload.TryGetValue("__custom_tabular_data", out var customTabularDataObj) && 
+            customTabularDataObj is string customTabularDataStr)
         {
             try
             {
                 tabularData = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                    tabularDataStr, 
+                    customTabularDataStr, 
                     AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions) ?? new Dictionary<string, object>();
                 
                 // Check if schema ID and import batch ID are in the deserialized tabular data
@@ -297,7 +297,7 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             }
             catch (Exception ex)
             {
-                this._logger.LogWarning(ex, "Failed to deserialize tabular data for record {Id}", record.Id);
+                this._logger.LogWarning(ex, "Failed to deserialize custom tabular data for record {Id}", record.Id);
             }
         }
 

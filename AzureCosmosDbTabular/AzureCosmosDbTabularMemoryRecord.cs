@@ -240,60 +240,37 @@ internal class AzureCosmosDbTabularMemoryRecord
             Console.WriteLine($"FromMemoryRecord: Extracted row number from metadata: {rowNumber}");
         }
 
-        // First try to extract tabular data directly from the tabular_data field
-        if (record.Payload.TryGetValue("tabular_data", out var tabularDataObj) && tabularDataObj is string tabularDataStr)
+        // Only try to extract tabular data from the custom field
+        if (record.Payload.TryGetValue("__custom_tabular_data", out var customTabularDataObj) && customTabularDataObj is string customTabularDataStr)
         {
             try
             {
                 var deserializedData = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                    tabularDataStr, 
+                    customTabularDataStr, 
                     AzureCosmosDbTabularConfig.DefaultJsonSerializerOptions);
                 
                 if (deserializedData != null && deserializedData.Count > 0)
                 {
                     extractedData = deserializedData;
-                    Console.WriteLine($"FromMemoryRecord: Successfully deserialized tabular_data with {extractedData.Count} fields");
+                    Console.WriteLine($"FromMemoryRecord: Successfully deserialized __custom_tabular_data with {extractedData.Count} fields");
                     
                     // If we found tabular data, also check for schema_id and import_batch_id in it
                     if (string.IsNullOrEmpty(extractedSchemaId) && extractedData.TryGetValue("schema_id", out var dataSchemaId))
                     {
                         extractedSchemaId = dataSchemaId?.ToString() ?? string.Empty;
-                        Console.WriteLine($"FromMemoryRecord: Extracted schema ID from tabular_data: {extractedSchemaId}");
+                        Console.WriteLine($"FromMemoryRecord: Extracted schema ID from __custom_tabular_data: {extractedSchemaId}");
                     }
                     
                     if (string.IsNullOrEmpty(extractedImportBatchId) && extractedData.TryGetValue("import_batch_id", out var dataImportBatchId))
                     {
                         extractedImportBatchId = dataImportBatchId?.ToString() ?? string.Empty;
-                        Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from tabular_data: {extractedImportBatchId}");
+                        Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from __custom_tabular_data: {extractedImportBatchId}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WARN: Failed to deserialize tabular_data for record {record.Id}: {ex.Message}");
-                // Continue to try other methods if deserialization fails
-            }
-        }
-
-        // If we couldn't get data from tabular_data, try to extract from the text field
-        if (extractedData.Count == 0 && record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
-        {
-            try
-            {
-                // Check if text is in the new sentence format
-                if (text.StartsWith("Record from worksheet"))
-                {
-                    ParseSentenceFormat(text, extractedData, extractedSource);
-                }
-                // Check if text is in the old key-value format
-                else if (text.Contains("\n") && text.Contains(":"))
-                {
-                    ParseKeyValueFormat(text, extractedData, extractedSource);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"WARN: Failed to parse text field for record {record.Id}: {ex.Message}");
+                Console.WriteLine($"WARN: Failed to deserialize __custom_tabular_data for record {record.Id}: {ex.Message}");
             }
         }
 
