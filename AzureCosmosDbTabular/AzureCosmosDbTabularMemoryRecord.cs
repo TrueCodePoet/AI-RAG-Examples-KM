@@ -384,8 +384,9 @@ internal class AzureCosmosDbTabularMemoryRecord
                 if (colonIndex > 0)
                 {
                     string dataSection = text.Substring(colonIndex + 1).Trim();
+                    Console.WriteLine($"ParseSentenceFormat: Isolated data section: {dataSection.Substring(0, Math.Min(100, dataSection.Length))}...");
                     
-                    // Extract key-value pairs using regex
+                    // Extract key-value pairs using regex ONLY on the data section
                     var keyValueMatches = s_keyValueRegex.Matches(dataSection + "."); // Add a trailing period to match the last pair
                     
                     foreach (Match match in keyValueMatches)
