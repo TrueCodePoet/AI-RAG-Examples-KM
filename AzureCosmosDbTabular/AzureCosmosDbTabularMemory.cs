@@ -182,10 +182,21 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         // Extract source file name from tags if available
         string sourceFileName = "excel_import";
         if (record.Payload.TryGetValue("file", out var sourceFiles) && 
-            sourceFiles != null && 
-            sourceFiles.Count > 0)
+            sourceFiles != null)
         {
-            sourceFileName = sourceFiles[0];
+            // Check if sourceFiles is a collection
+            if (sourceFiles is IList<string> filesList && filesList.Count > 0)
+            {
+                sourceFileName = filesList[0];
+            }
+            else if (sourceFiles is string fileName && !string.IsNullOrEmpty(fileName))
+            {
+                sourceFileName = fileName;
+            }
+            else if (sourceFiles.ToString() != null)
+            {
+                sourceFileName = sourceFiles.ToString();
+            }
         }
 
         // Variables to store schema ID and import batch ID

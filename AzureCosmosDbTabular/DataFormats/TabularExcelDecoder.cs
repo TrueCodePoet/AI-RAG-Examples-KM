@@ -489,14 +489,25 @@ public sealed class TabularExcelDecoder : IContentDecoder
     /// <returns>The extracted schema.</returns>
     private TabularDataSchema ExtractSchemaFromWorkbook(XLWorkbook workbook, string datasetName)
     {
-        // Get the source file name from the workbook if available
+        // Use a default source file name
         string sourceFileName = "excel_import";
-        if (workbook.Properties.Custom.TryGetValue("FileName", out object fileNameObj) && 
-            fileNameObj is string fileName && 
-            !string.IsNullOrEmpty(fileName))
+        
+        // Try to get a more specific name if available
+        try
         {
-            sourceFileName = Path.GetFileName(fileName);
-            Console.WriteLine($"Using source file name from workbook properties: {sourceFileName}");
+            // Different versions of ClosedXML might have different property structures
+            // This is a safer approach that won't throw exceptions if properties aren't available
+            var workbookName = workbook.Properties.Title;
+            if (!string.IsNullOrEmpty(workbookName))
+            {
+                sourceFileName = Path.GetFileName(workbookName);
+                Console.WriteLine($"Using source file name from workbook title: {sourceFileName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Just log and continue with the default name
+            Console.WriteLine($"Could not get workbook name: {ex.Message}");
         }
         
         var schema = new TabularDataSchema
