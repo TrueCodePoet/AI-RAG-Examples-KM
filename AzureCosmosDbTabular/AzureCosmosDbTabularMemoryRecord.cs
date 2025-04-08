@@ -218,11 +218,13 @@ internal class AzureCosmosDbTabularMemoryRecord
         if (record.Payload.TryGetValue("schema_id", out var schemaIdObj) && schemaIdObj is string schemaIdStr)
         {
             extractedSchemaId = schemaIdStr;
+            Console.WriteLine($"FromMemoryRecord: Extracted schema ID from payload: {extractedSchemaId}");
         }
 
         if (record.Payload.TryGetValue("import_batch_id", out var importBatchIdObj) && importBatchIdObj is string importBatchIdStr)
         {
             extractedImportBatchId = importBatchIdStr;
+            Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from payload: {extractedImportBatchId}");
         }
 
         // Extract structured data from the text field in the payload
@@ -251,6 +253,17 @@ internal class AzureCosmosDbTabularMemoryRecord
         var finalData = data ?? extractedData;
         var finalSource = source ?? extractedSource;
 
+        // Log the provided schema ID and import batch ID
+        if (!string.IsNullOrEmpty(schemaId))
+        {
+            Console.WriteLine($"FromMemoryRecord: Provided schema ID parameter: {schemaId}");
+        }
+        
+        if (!string.IsNullOrEmpty(importBatchId))
+        {
+            Console.WriteLine($"FromMemoryRecord: Provided import batch ID parameter: {importBatchId}");
+        }
+
         // Create a single record instance with all the data
         var memoryRecord = new AzureCosmosDbTabularMemoryRecord
         {
@@ -267,15 +280,20 @@ internal class AzureCosmosDbTabularMemoryRecord
             ImportBatchId = importBatchId ?? extractedImportBatchId ?? string.Empty
         };
         
+        // Log the values that were set on the record
+        Console.WriteLine($"FromMemoryRecord: Set SchemaId={memoryRecord.SchemaId}, ImportBatchId={memoryRecord.ImportBatchId}");
+        
         // Ensure schema ID and import batch ID are also in the payload
         if (!string.IsNullOrEmpty(memoryRecord.SchemaId) && !memoryRecord.Payload.ContainsKey("schema_id"))
         {
             memoryRecord.Payload["schema_id"] = memoryRecord.SchemaId;
+            Console.WriteLine($"FromMemoryRecord: Added schema ID to payload: {memoryRecord.SchemaId}");
         }
         
         if (!string.IsNullOrEmpty(memoryRecord.ImportBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
         {
             memoryRecord.Payload["import_batch_id"] = memoryRecord.ImportBatchId;
+            Console.WriteLine($"FromMemoryRecord: Added import batch ID to payload: {memoryRecord.ImportBatchId}");
         }
 
         return memoryRecord;

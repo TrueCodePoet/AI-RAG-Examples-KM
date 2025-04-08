@@ -285,6 +285,9 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 schemaId, importBatchId);
         }
 
+        // Log the schema ID and import batch ID before creating the record
+        Console.WriteLine($"UpsertAsync: About to create record with schemaId={schemaId}, importBatchId={importBatchId}");
+        
         // Create the Cosmos DB record from the memory record, including schema ID and import batch ID
         var memoryRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(
             record, 
@@ -292,21 +295,42 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             schemaId: schemaId, 
             importBatchId: importBatchId);
             
-        // Ensure the schema ID and import batch ID are set in the record's payload and properties
+        // Double-check and ensure the schema ID and import batch ID are set in the record's properties
+        // This is a belt-and-suspenders approach to make sure these values are definitely set
         if (!string.IsNullOrEmpty(schemaId))
         {
-            memoryRecord.SchemaId = schemaId;
-            memoryRecord.Payload["schema_id"] = schemaId;
-            Console.WriteLine($"Setting schema ID in record: {schemaId}");
+            if (string.IsNullOrEmpty(memoryRecord.SchemaId))
+            {
+                Console.WriteLine($"UpsertAsync: SchemaId not set by FromMemoryRecord, setting it now: {schemaId}");
+                memoryRecord.SchemaId = schemaId;
+            }
+            
+            if (!memoryRecord.Payload.ContainsKey("schema_id"))
+            {
+                Console.WriteLine($"UpsertAsync: schema_id not in payload, adding it now: {schemaId}");
+                memoryRecord.Payload["schema_id"] = schemaId;
+            }
         }
         
         if (!string.IsNullOrEmpty(importBatchId))
         {
-            memoryRecord.ImportBatchId = importBatchId;
-            memoryRecord.Payload["import_batch_id"] = importBatchId;
-            Console.WriteLine($"Setting import batch ID in record: {importBatchId}");
+            if (string.IsNullOrEmpty(memoryRecord.ImportBatchId))
+            {
+                Console.WriteLine($"UpsertAsync: ImportBatchId not set by FromMemoryRecord, setting it now: {importBatchId}");
+                memoryRecord.ImportBatchId = importBatchId;
+            }
+            
+            if (!memoryRecord.Payload.ContainsKey("import_batch_id"))
+            {
+                Console.WriteLine($"UpsertAsync: import_batch_id not in payload, adding it now: {importBatchId}");
+                memoryRecord.Payload["import_batch_id"] = importBatchId;
+            }
         }
+        
+        // Log the final state of the record before saving to the database
+        Console.WriteLine($"UpsertAsync: Final record state - SchemaId={memoryRecord.SchemaId}, ImportBatchId={memoryRecord.ImportBatchId}");
 
+        // Save the record to the database
         var result = await this._cosmosClient
             .GetDatabase(this._databaseName)
             .GetContainer(index)
@@ -314,6 +338,8 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 memoryRecord,
                 memoryRecord.GetPartitionKey(),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+                
+        Console.WriteLine($"UpsertAsync: Record saved to database with ID {result.Resource.Id}");
 
         return result.Resource.Id;
     }
