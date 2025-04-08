@@ -21,6 +21,8 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Efficient indexing for tabular data
 - ✅ Schema management in the same container as data
 - ✅ Interface-based design for memory components
+- ✅ Robust metadata extraction from text fields
+- ✅ Proper tabular data deserialization and storage
 
 ### Query Processing
 - ✅ Natural language query handling
@@ -102,6 +104,16 @@ The project is in a functional prototype stage, with core components implemented
    - **Workaround**: Limit the number of documents processed.
    - **Planned Fix**: Implement tiered storage strategies.
 
+3. **Metadata Extraction**: Source dictionary was sometimes empty due to incorrect extraction.
+   - **Impact**: Missing worksheet, row, schema ID, and import batch ID in records.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed with improved text field parsing and fallback mechanisms.
+
+4. **Data Dictionary Population**: Data dictionary was sometimes empty, losing the actual row data.
+   - **Impact**: Loss of structured data fields and values in memory records.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed with proper deserialization of the tabular_data field.
+
 ### Rate Limiting
 1. **Azure OpenAI Rate Limits**: Processing large datasets can hit API rate limits.
    - **Impact**: Processing delays due to required wait times between retries.
@@ -129,6 +141,8 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-07 | Fixed TabularExcelDecoder schema storage issue - Phase 1 (DI improvements) | Completed |
 | 2025-04-07 | Fixed TabularExcelDecoder schema storage issue - Phase 2 (Runtime injection) | Completed |
 | 2025-04-07 | Improved code with interface-based design (IMemoryDb) | Completed |
+| 2025-04-07 | Fixed source dictionary extraction from text fields | Completed |
+| 2025-04-07 | Fixed data dictionary population with proper deserialization | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
 | 2025-04-20 | Documentation and examples | In Progress |

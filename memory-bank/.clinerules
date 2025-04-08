@@ -47,6 +47,26 @@
 - Schema information is extracted during import and stored in the same container as the data, with special metadata tags to identify schema documents.
 - PivotTable structures in Excel files are now handled gracefully with the SkipPivotTables configuration option (default: true).
 
+### Metadata Extraction
+- The TabularExcelDecoder generates text in a specific format that includes metadata about the record:
+  - "Record from worksheet SheetName, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
+- AzureCosmosDbTabularMemory parses this text to extract metadata:
+  1. First tries to extract worksheet name, row number, schema ID, and import batch ID from the text field
+  2. Falls back to checking payload fields if not found in text
+  3. Uses consistent variable naming to avoid compilation errors
+- This approach ensures all metadata is properly included in the Cosmos DB documents
+- When modifying either component, ensure the text format and parsing logic remain synchronized
+
+### Data Deserialization
+- The TabularExcelDecoder serializes row data to JSON in the "tabular_data" field of the chunk metadata
+- AzureCosmosDbTabularMemoryRecord deserializes this data in the following order:
+  1. First tries to deserialize the "tabular_data" field directly from the payload
+  2. If successful, populates the Data dictionary with the deserialized data
+  3. Falls back to parsing the text field if tabular_data deserialization fails
+  4. Uses the provided data parameter as a final fallback
+- This ensures the memory row holds the actual data with correct fields and values
+- When modifying the serialization format, ensure the deserialization logic is updated accordingly
+
 ### Filter Generation
 - Natural language queries are analyzed to extract structured filters
 - Field names are prefixed with "data." for structured fields (e.g., `data.column_name`).
@@ -136,6 +156,18 @@
 - When extending the TabularExcelDecoder, be aware of accessibility conflicts between internal and public types
 - Use object parameters with casting for public methods that need to work with internal types
 - Avoid exposing internal types in public method signatures
+
+#### "Empty source dictionary"
+- This issue has been fixed by improving the text field parsing in AzureCosmosDbTabularMemory
+- The code now extracts metadata (worksheet, row, schema ID, import batch ID) from the text field first
+- It also implements fallbacks to check payload fields if not found in text
+- If you encounter this issue, ensure you're using the latest version of the code
+
+#### "Empty data dictionary"
+- This issue has been fixed by implementing proper deserialization of the tabular_data field
+- The code now deserializes the tabular_data field directly from the payload
+- It falls back to text parsing if tabular_data deserialization fails
+- If you encounter this issue, ensure you're using the latest version of the code
 
 #### "Azure service errors"
 - Verify that all API keys and endpoints are correctly configured.

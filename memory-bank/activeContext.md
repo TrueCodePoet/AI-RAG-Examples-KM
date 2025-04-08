@@ -21,6 +21,9 @@ The project is currently focused on implementing and testing the tabular data pr
 - Added support for efficient filtering on data fields
 - Implemented specialized indexing policies for tabular data
 - Modified schema storage to use the same container as vector data
+- Fixed source dictionary extraction to properly parse text field for metadata
+- Enhanced schema ID and import batch ID extraction from text field
+- Fixed data dictionary population to properly deserialize tabular_data field
 
 ### Query Processing
 - Enhanced KernelMemoryQueryProcessor with filter generation capabilities
@@ -54,6 +57,8 @@ The project is currently focused on implementing and testing the tabular data pr
 2. **Custom Excel Processing**: Chose to implement a specialized Excel decoder rather than using the standard one to better preserve tabular structure.
 3. **Filter Generation Approach**: Opted for an AI-driven approach to filter generation rather than a rule-based system for greater flexibility.
 4. **Single Container for Schema and Data**: Decided to store schema information in the same container as the data for simplicity and improved data locality.
+5. **Text Field Parsing**: Implemented a robust approach to extract metadata (worksheet, row, schema ID, import batch ID) from the text field first, with fallbacks to other sources.
+6. **Tabular Data Deserialization**: Prioritized direct deserialization of the tabular_data field over text parsing to ensure accurate data representation.
 
 ### Open Questions
 1. **Scaling Strategy**: How to efficiently scale the system for very large datasets?
@@ -79,6 +84,18 @@ The project is currently focused on implementing and testing the tabular data pr
    - Modified TabularExcelDecoder to accept IMemoryDb instead of AzureCosmosDbTabularMemory
    - Updated Program.cs to work with IMemoryDb for better abstraction
    - This change improves maintainability and allows for easier swapping of memory implementations
+
+10. **Source Dictionary Extraction**: Fixed issue where source dictionary was empty by implementing a more robust approach:
+    - Added code to extract metadata (worksheet, row, schema ID, import batch ID) from the text field first
+    - Implemented fallbacks to check payload fields if not found in text
+    - Used consistent variable naming to avoid compilation errors
+    - This ensures all metadata is properly included in the Cosmos DB documents
+
+11. **Data Dictionary Population**: Fixed issue where the data dictionary was empty by implementing proper deserialization:
+    - Added code to directly deserialize the tabular_data field from the payload
+    - Prioritized this approach over text parsing for more accurate data representation
+    - Added fallback to text parsing if tabular_data deserialization fails
+    - This ensures the memory row holds the actual data with correct fields and values
 
 ## Rate Limiting Considerations
 
