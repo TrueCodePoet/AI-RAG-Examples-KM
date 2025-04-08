@@ -380,6 +380,9 @@ public sealed class TabularExcelDecoder : IContentDecoder
                         rowData["import_batch_id"] = importBatchId;
                         Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to row data: {importBatchId}");
                     }
+                    
+                    // Log the row data for debugging
+                    Console.WriteLine($"TabularExcelDecoder: Row data contains {rowData.Count} fields, including schema_id: {rowData.ContainsKey("schema_id")}, import_batch_id: {rowData.ContainsKey("import_batch_id")}");
 
                     // Create a chunk for this row
                     chunkNumber++;

@@ -295,36 +295,19 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
             schemaId: schemaId, 
             importBatchId: importBatchId);
             
-        // Double-check and ensure the schema ID and import batch ID are set in the record's properties
-        // This is a belt-and-suspenders approach to make sure these values are definitely set
-        if (!string.IsNullOrEmpty(schemaId))
+        // Ensure schema ID and import batch ID are in the payload
+        // Since we can't modify SchemaId and ImportBatchId properties after initialization (they use init accessors),
+        // we need to ensure they're properly set during initialization via FromMemoryRecord
+        if (!string.IsNullOrEmpty(schemaId) && !memoryRecord.Payload.ContainsKey("schema_id"))
         {
-            if (string.IsNullOrEmpty(memoryRecord.SchemaId))
-            {
-                Console.WriteLine($"UpsertAsync: SchemaId not set by FromMemoryRecord, setting it now: {schemaId}");
-                memoryRecord.SchemaId = schemaId;
-            }
-            
-            if (!memoryRecord.Payload.ContainsKey("schema_id"))
-            {
-                Console.WriteLine($"UpsertAsync: schema_id not in payload, adding it now: {schemaId}");
-                memoryRecord.Payload["schema_id"] = schemaId;
-            }
+            Console.WriteLine($"UpsertAsync: Adding schema_id to payload: {schemaId}");
+            memoryRecord.Payload["schema_id"] = schemaId;
         }
         
-        if (!string.IsNullOrEmpty(importBatchId))
+        if (!string.IsNullOrEmpty(importBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
         {
-            if (string.IsNullOrEmpty(memoryRecord.ImportBatchId))
-            {
-                Console.WriteLine($"UpsertAsync: ImportBatchId not set by FromMemoryRecord, setting it now: {importBatchId}");
-                memoryRecord.ImportBatchId = importBatchId;
-            }
-            
-            if (!memoryRecord.Payload.ContainsKey("import_batch_id"))
-            {
-                Console.WriteLine($"UpsertAsync: import_batch_id not in payload, adding it now: {importBatchId}");
-                memoryRecord.Payload["import_batch_id"] = importBatchId;
-            }
+            Console.WriteLine($"UpsertAsync: Adding import_batch_id to payload: {importBatchId}");
+            memoryRecord.Payload["import_batch_id"] = importBatchId;
         }
         
         // Log the final state of the record before saving to the database
