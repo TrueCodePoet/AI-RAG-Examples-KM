@@ -5,8 +5,9 @@ using Microsoft.SemanticKernel.Connectors.AzureOpenAI; // For AzureOpenAIPromptE
 using Microsoft.KernelMemory.AI.AzureOpenAI; // For AzureOpenAIConfig
 using System.Text.Json; // For JsonSerializer
 using Microsoft.SemanticKernel.Connectors.OpenAI; // For MemoryFilter
-using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular; // For TabularFilterHelper
+using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular; // For TabularFilterHelper, TabularDataSchema
 using Microsoft.Extensions.DependencyInjection; // For GetRequiredService
+using System.Text; // For StringBuilder
 
 namespace AI_RAG_Examples_KM
 {
@@ -173,55 +174,83 @@ Dataset:";
             catch (Exception ex)
             {
                 Console.WriteLine($"Error during dataset identification: {ex.Message}");
+                datasetName = string.Empty; // Ensure datasetName is empty on error
             }
-            
+
+            // --- Fetch Schema Info (if dataset identified) ---
+            TabularDataSchema? schema = null;
+            string formattedSchemaInfo = "No schema information available for filter generation."; // Default
+            if (!string.IsNullOrEmpty(datasetName))
+            {
+                Console.WriteLine($"--- Fetching Schema for: {datasetName} ---");
+                try
+                {
+                    // Re-use or create filter helper instance
+                    var schemaHelper = new TabularFilterHelper(_memory);
+                    schema = await schemaHelper.GetSchemaAsync(datasetName);
+                    if (schema != null)
+                    {
+                        formattedSchemaInfo = FormatSchemaForPrompt(schema);
+                        Console.WriteLine($"Schema Info Found:\n{formattedSchemaInfo}");
+                    }
+                    else
+                    {
+                         Console.WriteLine($"Schema object not found for dataset: {datasetName}");
+                         formattedSchemaInfo = $"Schema object not found for dataset '{datasetName}'. Cannot provide specific field info.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error fetching schema for dataset {datasetName}: {ex.Message}");
+                    formattedSchemaInfo = $"Error fetching schema for dataset '{datasetName}'. Cannot provide specific field info.";
+                    // Continue without schema info, LLM will have less context
+                }
+            }
+            else
+            {
+                 Console.WriteLine("No dataset identified, skipping schema fetch.");
+            }
+
             // --- Filter Generation Step ---
             Console.WriteLine("--- Generating Filters ---");
-         
+
+            // Updated prompt template to include schema info
             string filterPromptTemplate = @"
-        Analyze the user's question to identify specific criteria that can be used to filter tabular data or apply tags.
-         
+        Analyze the user's question to identify specific criteria that can be used to filter tabular data or apply tags, based ONLY on the provided schema fields.
+
+        Available Schema Fields (use these exact keys):
+        {{$schemaInfo}}
+        {{!-- End of Schema Info --}}
+
         RULES FOR OUTPUT KEYS:
-        1. If a criterion refers to a structured data column (like environment, status, server name, server purpose), prefix the key with ""data."".
-        2. Normalize the structured data key:
-            - Convert the natural name (e.g., ""Server Purpose"", ""Operating System"") to lowercase.
-            - Replace spaces and other non-alphanumeric characters (except underscore) with underscores.
-            - Example: ""Server Purpose"" becomes ""data.server_purpose"".
-            - Example: ""Operating System"" becomes ""data.operating_system"".
-        3. If a criterion refers to a general category or context (like application, project), use it directly as a standard tag key (lowercase). Example: ""application"".
+        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
+        2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
+        3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
         4. Extract the specific value mentioned for the criterion.
         5. Format the output STRICTLY as a JSON object containing the identified key-value pairs.
-        6. If no specific filter criteria are found, output an empty JSON object: {}
-         
+        6. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
+
         FORMAT:
         DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
-         
+
         EXAMPLES:
-        Question: Show me production servers.
+        {{!-- Examples are less critical now schema is provided, but can still help --}}
+        Question: Show me production servers. {{!-- Assuming 'environment' is a tag or 'data.environment' is in schema --}}
         Output: {""data.environment"": ""Production""}
-         
-        Question: List all servers for the 'Phoenix' project.
+
+        Question: List all servers for the 'Phoenix' project. {{!-- Assuming 'project' is a tag --}}
         Output: {""project"": ""Phoenix""}
-         
-        Question: Give me all production servers from TAMI application
-        Output: {""data.environment"": ""Production"", ""application"": ""TAMI""}
-         
-        Question: What servers are running Windows Server 2019 in the East US location?
-        Output: {""data.operating_system"": ""Windows Server 2019"", ""data.location"": ""East US""}
-         
-        Question: What is the server purpose for VAXVNAGG01?
+
+        Question: What is the server purpose for VAXVNAGG01? {{!-- Assuming 'data.server_name' is in schema --}}
         Output: {""data.server_name"": ""VAXVNAGG01""}
-         
+
         Question: Tell me about the system architecture.
         Output: {}
-         
+
         Question: {{ $input }}
         Output:
         ";
-         
-            // --- Filter Generation Step ---
-            Console.WriteLine("--- Generating Filters ---");
-         
+
             var generateFiltersFunction = _kernel.CreateFunctionFromPrompt(
                 filterPromptTemplate, functionName: "GenerateNormalizedFilters",
                 description: "Analyzes a user question and generates normalized structured filters as JSON.",
@@ -233,10 +262,17 @@ Dataset:";
             
             try
             {
-                var filterResult = await _kernel.InvokeAsync(generateFiltersFunction, new() { { "input", question } });
+                // Inject schema info into the arguments
+                var filterArguments = new KernelArguments()
+                {
+                    { "input", question },
+                    { "schemaInfo", formattedSchemaInfo }
+                };
+
+                var filterResult = await _kernel.InvokeAsync(generateFiltersFunction, filterArguments);
                 var filterJson = filterResult.GetValue<string>()?.Trim();
                 Console.WriteLine($"LLM Normalized Filter Suggestion: {filterJson}"); // Debug output
-         
+
                 if (!string.IsNullOrWhiteSpace(filterJson) && filterJson != "{}")
                 {
                     // Deserialize directly, assuming keys are now correctly normalized by the LLM
@@ -377,6 +413,43 @@ Dataset:";
             Console.WriteLine(response.GetValue<string>());
             Console.WriteLine("\nPress Enter to exit.");
             Console.ReadLine();
+        }
+
+        // Helper method to format schema information for the LLM prompt
+        private string FormatSchemaForPrompt(TabularDataSchema schema)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Structured Data Fields (Prefix keys with 'data.'):");
+            if (schema.Columns != null && schema.Columns.Any())
+            {
+                foreach (var col in schema.Columns.OrderBy(c => c.NormalizedName))
+                {
+                    // Use the *normalized* name for the key the LLM should generate
+                    string key = $"data.{col.NormalizedName}";
+                    sb.Append($"- {key}");
+                    if (col.CommonValues != null && col.CommonValues.Any())
+                    {
+                        // Limit examples shown for brevity
+                        var examples = col.CommonValues.Take(5).Select(v => $"\"{v}\"");
+                        sb.Append($" (e.g., {string.Join(", ", examples)})");
+                    }
+                    sb.AppendLine();
+                }
+            }
+            else
+            {
+                sb.AppendLine("  (No specific column data available)");
+            }
+
+            // Add common tag fields (these could potentially be dynamic in a future version)
+            sb.AppendLine("\nCommon Tag Fields (Use keys directly):");
+            sb.AppendLine("- project");
+            sb.AppendLine("- application");
+            sb.AppendLine("- environment");
+            sb.AppendLine("- status");
+            // Add any other known standard tags if applicable
+
+            return sb.ToString();
         }
     }
 }

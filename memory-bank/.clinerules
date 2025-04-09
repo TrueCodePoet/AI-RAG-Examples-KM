@@ -73,10 +73,19 @@
 
 ### Filter Generation
 - Natural language queries are analyzed to extract structured filters
-- Field names are prefixed with "data." for structured fields (e.g., `data.column_name`).
-- When querying, the `AzureCosmosDbTabularMemory` normalizes these field names (e.g., converting camelCase `data.serverPurpose` to snake_case `data.server_purpose`) before building the SQL query, assuming snake_case keys in the stored `Data` object.
-- The filter generation prompt includes examples for common query patterns.
-- Generated filters are applied to the Cosmos DB query.
+- Filter generation is a multi-step process handled by KernelMemoryQueryProcessor:
+  1. **Dataset Identification**: Uses TabularFilterHelper to list available datasets and an LLM call to determine which is relevant to the query
+  2. **Filter Generation**: Uses a specialized prompt to generate a JSON representation of filters
+  3. **Schema-based Validation**: Uses TabularFilterHelper to validate generated filters against the dataset's schema
+  4. **Query Execution**: Applies validated filters to Cosmos DB query
+- Key filter generation rules enforced by the prompt:
+  - Field names for structured data must be prefixed with "data." (e.g., `data.column_name`)
+  - Field names must be normalized to snake_case format (e.g., "Server Purpose" becomes `data.server_purpose`)
+  - Output must be a valid JSON object with string values (no nested structures)
+  - The JSON format is critical as it's directly deserialized to create the filter object
+- When querying, the `AzureCosmosDbTabularMemory` normalizes these field names (e.g., converting camelCase `data.serverPurpose` to snake_case `data.server_purpose`) before building the SQL query, assuming snake_case keys in the stored `Data` object
+- The filter generation prompt includes examples for common query patterns
+- Generated filters are applied to the Cosmos DB query
 
 ### Query Processing
 - Queries can use direct search or AI-assisted approaches

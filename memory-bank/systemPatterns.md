@@ -135,9 +135,9 @@ flowchart TD
 
 2. **Query Flow**
    ```
-   Natural Language Query → Filter Generation → 
-   Structured Query → Cosmos DB Retrieval → 
-   Result Synthesis → Formatted Response
+   Natural Language Query → Dataset Identification → Filter Generation → 
+   Schema-based Filter Validation → Structured Query → 
+   Cosmos DB Retrieval → Result Synthesis → Formatted Response
    ```
 
 ## Technical Decisions
@@ -147,17 +147,23 @@ flowchart TD
    - Supports efficient vector search for embeddings
    - Allows for structured queries on tabular data
 
-2. **Custom Excel Processing**
+2. **Runtime Dependency Injection**
+   - Uses reflection in `Program.cs` (`MemoryHelper`) to inject the `IMemoryDb` instance into `TabularExcelDecoder` at runtime
+   - Enables the decoder to save schema information despite being instantiated early in the pipeline
+   - Works around limitations in the Kernel Memory framework's pipeline configuration
+   - Promotes interface-based design by working with `IMemoryDb` rather than concrete implementations
+
+3. **Custom Excel Processing**
    - Preserves tabular structure during ingestion
    - Maintains data types and relationships
    - Enables more precise querying of structured data
 
-3. **AI-Assisted Filter Generation**
+4. **AI-Assisted Filter Generation**
    - Translates natural language to structured filters
    - Improves precision of queries against tabular data
    - Reduces need for exact field name knowledge
 
-4. **Modular Pipeline Architecture**
+5. **Modular Pipeline Architecture**
    - Allows for customization of processing steps
    - Enables extension to new document types
    - Provides clear separation of concerns

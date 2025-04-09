@@ -28,7 +28,9 @@ The project is currently focused on implementing and testing the tabular data pr
 
 ### Query Processing
 - Enhanced KernelMemoryQueryProcessor with filter generation capabilities
-- Added support for translating natural language to structured filters
+- Implemented dataset identification using TabularFilterHelper and LLM to determine the relevant dataset for a query
+- Added support for translating natural language to structured filters with JSON output format
+- Implemented schema-based filter validation against the identified dataset's schema
 - Implemented specialized response formatting for tabular data queries
 
 ## Next Steps
@@ -96,6 +98,12 @@ The project is currently focused on implementing and testing the tabular data pr
     - Prioritized this approach over text parsing for more accurate data representation
     - Added fallback to text parsing if tabular_data deserialization fails
     - This ensures the memory row holds the actual data with correct fields and values
+
+12. **Runtime Reflection for Dependency Injection**: Implemented a reflection-based approach in Program.cs to inject dependencies:
+    - Created MemoryHelper class with reflection methods to access internal Kernel Memory components
+    - Added GetMemoryDbFromKernelMemory method to extract the IMemoryDb instance from IKernelMemory
+    - Added SetMemoryOnTabularExcelDecoders method to inject the IMemoryDb into TabularExcelDecoder instances
+    - This approach is a workaround for pipeline initialization limitations but introduces reliance on internal implementation details
 
 ## Rate Limiting Considerations
 

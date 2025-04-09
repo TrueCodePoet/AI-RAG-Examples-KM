@@ -133,21 +133,31 @@ public sealed class TabularExcelDecoder : IContentDecoder
     /// <inheritdoc />
     public async Task<FileContent> DecodeAsync(string filename, CancellationToken cancellationToken = default)
     {
+        this._log.LogDebug("Decoding file: {Filename}", filename);
         using var stream = File.OpenRead(filename);
-        return await this.DecodeAsync(stream, cancellationToken);
+        // Pass the filename to the internal stream decoding method
+        return await this.DecodeStreamInternalAsync(stream, filename, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<FileContent> DecodeAsync(BinaryData data, CancellationToken cancellationToken = default)
     {
         using var stream = data.ToStream();
-        return await this.DecodeAsync(stream, cancellationToken);
+        // Call the internal stream decoding method without a filename
+        return await this.DecodeStreamInternalAsync(stream, originalFilename: null, cancellationToken: cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<FileContent> DecodeAsync(Stream data, CancellationToken cancellationToken = default)
     {
-        this._log.LogDebug("Extracting tabular data from MS Excel file");
+        // Call the internal stream decoding method without a filename, passing the 'data' parameter
+        return await this.DecodeStreamInternalAsync(data, originalFilename: null, cancellationToken: cancellationToken);
+    }
+
+    // Internal method to handle the actual stream decoding, accepting an optional original filename
+    private async Task<FileContent> DecodeStreamInternalAsync(Stream data, string? originalFilename = null, CancellationToken cancellationToken = default)
+    {
+        this._log.LogDebug("Internal: Extracting tabular data from MS Excel file stream. Original filename: {OriginalFilename}", originalFilename ?? "Unknown");
 
         var result = new FileContent(MimeTypes.PlainText);
         XLWorkbook? workbook = null;
@@ -216,7 +226,8 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     {
                         try
                         {
-                            var schema = ExtractSchemaFromWorkbook(workbook, this._datasetName);
+                            // Pass the original filename if available
+                            var schema = ExtractSchemaFromWorkbook(workbook, this._datasetName, originalFilename);
                             if (schema != null)
                             {
                                 // Get the index name from the current operation context if available
@@ -525,12 +536,12 @@ public sealed class TabularExcelDecoder : IContentDecoder
     /// </summary>
     /// <param name="workbook">The workbook to extract schema from.</param>
     /// <param name="datasetName">The dataset name.</param>
+    /// <param name="sourceFilePath">Optional path to the original source file.</param>
     /// <returns>The extracted schema.</returns>
-    private TabularDataSchema ExtractSchemaFromWorkbook(XLWorkbook workbook, string datasetName)
+    private TabularDataSchema ExtractSchemaFromWorkbook(XLWorkbook workbook, string datasetName, string? sourceFilePath = null)
     {
-        // Use a default source file name
-        string sourceFileName = "excel_import";
-        
+        string sourceFileName = "excel_import"; // Default value
+
         // Try to get a more specific name if available
         try
         {
@@ -546,9 +557,25 @@ public sealed class TabularExcelDecoder : IContentDecoder
         catch (Exception ex)
         {
             // Just log and continue with the default name
-            Console.WriteLine($"Could not get workbook name: {ex.Message}");
+            Console.WriteLine($"Could not get workbook title: {ex.Message}");
         }
-        
+
+        // If title didn't provide a name, try using the source file path if provided
+        if (string.IsNullOrEmpty(workbook.Properties.Title) && !string.IsNullOrEmpty(sourceFilePath))
+        {
+            try
+            {
+                sourceFileName = Path.GetFileName(sourceFilePath);
+                Console.WriteLine($"Using source file name from provided path: {sourceFileName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Could not get filename from path '{sourceFilePath}': {ex.Message}");
+                // Keep the default "excel_import" if path parsing fails
+            }
+        }
+        // If both title and path fail, sourceFileName remains "excel_import"
+
         var schema = new TabularDataSchema
         {
             DatasetName = datasetName,
