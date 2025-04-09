@@ -172,11 +172,33 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     {
         // Extract dataset name from tags if available
         string? datasetName = null;
-        if (record.Tags.TryGetValue("dataset_name", out var datasetNames) && 
-            datasetNames != null && 
-            datasetNames.Count > 0)
+        if (record.Tags.TryGetValue("dataset_name", out var datasetNames)) 
         {
-            datasetName = datasetNames[0];
+                    // Check the type of datasetNames using GetType()
+                    object datasetNamesObj = datasetNames;
+                    Type datasetNamesType = datasetNamesObj.GetType();
+                    
+                    if (datasetNamesType == typeof(string))
+                    {
+                        // Handle string type
+                        datasetName = (string)datasetNamesObj;
+                    }
+                    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(datasetNamesType) && 
+                             datasetNamesType != typeof(string)) // strings are IEnumerable<char> so we exclude them
+                    {
+                        // Handle any collection type
+                        var enumerable = (System.Collections.IEnumerable)datasetNamesObj;
+                        var enumerator = enumerable.GetEnumerator();
+                        
+                        if (enumerator.MoveNext() && enumerator.Current != null)
+                        {
+                            datasetName = enumerator.Current.ToString();
+                        }
+                    }
+                    else if (datasetNamesObj != null)
+                    {
+                        datasetName = datasetNamesObj.ToString();
+                    }
         }
 
         // Extract source file name from tags if available
@@ -184,19 +206,50 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         if (record.Payload.TryGetValue("file", out var sourceFiles) && 
             sourceFiles != null)
         {
-            // Check if sourceFiles is a collection
-            if (sourceFiles is IList<string> filesList && filesList.Count > 0)
-            {
-                sourceFileName = filesList[0];
-            }
-            else if (sourceFiles is string fileName && !string.IsNullOrEmpty(fileName))
-            {
-                sourceFileName = fileName;
-            }
-            else if (sourceFiles.ToString() != null)
-            {
-                sourceFileName = sourceFiles.ToString();
-            }
+                    // Check the type of sourceFiles using GetType()
+                    object sourceFilesObj = sourceFiles;
+                    Type sourceFilesType = sourceFilesObj.GetType();
+                    
+                    if (sourceFilesType == typeof(string))
+                    {
+                        // Handle string type
+                        string fileName = (string)sourceFilesObj;
+                        if (!string.IsNullOrEmpty(fileName))
+                        {
+                            sourceFileName = fileName;
+                        }
+                    }
+                    else if (sourceFilesType == typeof(List<string>) || 
+                             (typeof(IList<string>).IsAssignableFrom(sourceFilesType) && sourceFilesType != typeof(string)))
+                    {
+                        // Handle IList<string> type
+                        var filesList = (IList<string>)sourceFilesObj;
+                        if (filesList.Count > 0)
+                        {
+                            sourceFileName = filesList[0];
+                        }
+                    }
+                    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(sourceFilesType) && 
+                             sourceFilesType != typeof(string))
+                    {
+                        // Handle any other collection type
+                        var enumerable = (System.Collections.IEnumerable)sourceFilesObj;
+                        var enumerator = enumerable.GetEnumerator();
+                        
+                        if (enumerator.MoveNext() && enumerator.Current != null)
+                        {
+                            sourceFileName = enumerator.Current.ToString();
+                        }
+                    }
+                    else if (sourceFilesObj != null)
+                    {
+                        // Handle any other type by converting to string
+                        string stringValue = sourceFilesObj.ToString();
+                        if (stringValue != null)
+                        {
+                            sourceFileName = stringValue;
+                        }
+                    }
         }
 
         // Variables to store schema ID and import batch ID
@@ -269,28 +322,66 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 // Check if schema ID and import batch ID are in the deserialized tabular data
                 if (string.IsNullOrEmpty(schemaId) && tabularData.TryGetValue("schema_id", out var tabularSchemaId))
                 {
-                    if (tabularSchemaId is string tabularSchemaIdStr)
-                    {
-                        schemaId = tabularSchemaIdStr;
-                        Console.WriteLine($"Extracted schema ID from tabular data: {schemaId}");
-                    }
-                    else if (tabularSchemaId != null)
-                    {
-                        schemaId = tabularSchemaId.ToString();
-                        Console.WriteLine($"Extracted and converted schema ID from tabular data: {schemaId}");
-                    }
+    // Handle different types using GetType()
+    object schemaIdObj = tabularSchemaId;
+    Type schemaIdType = schemaIdObj.GetType();
+    
+    if (schemaIdType == typeof(string))
+    {
+        // Handle string type
+        schemaId = (string)schemaIdObj;
+        Console.WriteLine($"Extracted schema ID from tabular data: {schemaId}");
+    }
+    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(schemaIdType) && 
+             schemaIdType != typeof(string)) // strings are IEnumerable<char> so we exclude them
+    {
+        // Handle any collection type
+        var enumerable = (System.Collections.IEnumerable)schemaIdObj;
+        var enumerator = enumerable.GetEnumerator();
+        
+        if (enumerator.MoveNext() && enumerator.Current != null)
+        {
+            schemaId = enumerator.Current.ToString()!;
+            Console.WriteLine($"Extracted schema ID from tabular data list: {schemaId}");
+        }
+    }
+    else if (schemaIdObj != null)
+    {
+        // Handle any other type by converting to string
+        schemaId = schemaIdObj.ToString();
+        Console.WriteLine($"Extracted and converted schema ID from tabular data: {schemaId}");
+    }
                 }
                 
                 if (string.IsNullOrEmpty(importBatchId) && tabularData.TryGetValue("import_batch_id", out var tabularImportBatchId))
                 {
-                    if (tabularImportBatchId is string tabularImportBatchIdStr)
+                    // Handle different types using GetType()
+                    object importBatchIdObj = tabularImportBatchId;
+                    Type importBatchIdType = importBatchIdObj.GetType();
+                    
+                    if (importBatchIdType == typeof(string))
                     {
-                        importBatchId = tabularImportBatchIdStr;
+                        // Handle string type
+                        importBatchId = (string)importBatchIdObj;
                         Console.WriteLine($"Extracted import batch ID from tabular data: {importBatchId}");
-                    }
-                    else if (tabularImportBatchId != null)
+                    } 
+                    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(importBatchIdType) && 
+                             importBatchIdType != typeof(string)) // strings are IEnumerable<char> so we exclude them
                     {
-                        importBatchId = tabularImportBatchId.ToString();
+                        // Handle any collection type
+                        var enumerable = (System.Collections.IEnumerable)importBatchIdObj;
+                        var enumerator = enumerable.GetEnumerator();
+                        
+                        if (enumerator.MoveNext() && enumerator.Current != null)
+                        {
+                            importBatchId = enumerator.Current.ToString()!;
+                            Console.WriteLine($"Extracted import batch ID from tabular data list: {importBatchId}");
+                        }
+                    }
+                    else if (importBatchIdObj != null)
+                    {
+                        // Handle any other type by converting to string
+                        importBatchId = importBatchIdObj.ToString();
                         Console.WriteLine($"Extracted and converted import batch ID from tabular data: {importBatchId}");
                     }
                 }
@@ -696,9 +787,8 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                     innerBuilder.Append(" AND ");
                 }
 
-                // Use a consistent parameter naming scheme
-                string paramName = $"@p_{parameters.Count}";
-                parameters.Add(Tuple.Create<string, object>(paramName, pair.Value));
+                // Store the original value for logging
+                object originalValue = pair.Value;
 
                 if (pair.Key.StartsWith("data.", StringComparison.Ordinal))
                 {
@@ -709,8 +799,78 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                     string fieldName = normalizedKey.Substring(5);
                     if (!string.IsNullOrEmpty(fieldName))
                     {
-                        // Use bracket notation for field names that might contain special characters
-                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] = {paramName}");
+                        // Check the type of pair.Value using GetType()
+                        object valueObj = pair.Value;
+                        Type valueType = valueObj.GetType();
+                        
+                        if (valueType == typeof(string))
+                        {
+                            // For string values
+                            string stringValue = (string)valueObj;
+                            bool useFuzzyMatch = stringValue.Length > 1;
+                            string paramName = $"@p_{parameters.Count}";
+                            
+                            // Add parameter with lowercase value for case-insensitive matching
+                            parameters.Add(Tuple.Create<string, object>(paramName, stringValue.ToLowerInvariant()));
+
+                            // Determine operator based on data type and content
+                            if (useFuzzyMatch)
+                            {
+                                // For string values, use CONTAINS and case-insensitive matching
+                                innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]), {paramName})");
+                                this._logger.LogDebug("Using fuzzy matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
+                            }
+                            else
+                            {
+                                // For short strings, use equality with lowercase transform
+                                innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) = {paramName}");
+                            }
+                        }
+                        else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(valueType) && 
+                                 valueType != typeof(string)) // strings are IEnumerable<char> so we exclude them
+                        {
+                            // For collection of string values - handle as OR condition with each valid item
+                            innerBuilder.Append("(");
+                            bool firstValue = true;
+                            
+                            // Handle any collection type
+                            var enumerable = (System.Collections.IEnumerable)valueObj;
+                            foreach (var item in enumerable)
+                            {
+                                if (item != null)
+                                {
+                                    string paramName = $"@p_{parameters.Count}";
+                                    parameters.Add(Tuple.Create<string, object>(paramName, item.ToString().ToLowerInvariant()));
+                                    
+                                    if (!firstValue)
+                                    {
+                                        innerBuilder.Append(" OR ");
+                                    }
+                                    
+                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) = {paramName}");
+                                    firstValue = false;
+                                }
+                            }
+                            
+                            // Only add closing parenthesis if at least one value was processed
+                            if (!firstValue)
+                            {
+                                innerBuilder.Append(")");
+                            }
+                            else
+                            {
+                                // Skip this condition if no valid values in collection
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            // For non-string values
+                            string paramName = $"@p_{parameters.Count}";
+                            parameters.Add(Tuple.Create<string, object>(paramName, pair.Value));
+                            innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] = {paramName}");
+                        }
+                        
                         firstInnerCondition = false;
 
                         // Log the normalization if it happened
@@ -722,15 +882,75 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                     else
                     {
                         this._logger.LogWarning("Invalid structured data filter key found: {Key}", pair.Key);
-                        // Remove the parameter added for the invalid key
-                        parameters.RemoveAt(parameters.Count - 1);
                     }
                 }
                 else // Handle standard tag filter
                 {
-                    // Use bracket notation for tag keys that might contain special characters
-                    innerBuilder.Append($"ARRAY_CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.TagsField}[\"{pair.Key}\"], {paramName})");
-                    firstInnerCondition = false;
+                    // For tags, we need to handle both string and List<string?> comparisons
+                    // Tag values in CosmosDB are stored as arrays, so we use EXISTS with a subquery
+                    
+                    // Check the type of pair.Value using GetType()
+                    object valueObj = pair.Value;
+                    Type valueType = valueObj.GetType();
+                    
+                    if (valueType == typeof(string))
+                    {
+                        // Single string value for tag
+                        string stringValue = (string)valueObj;
+                        string paramName = $"@p_{parameters.Count}";
+                        parameters.Add(Tuple.Create<string, object>(paramName, stringValue.ToLowerInvariant()));
+                        
+                        // Case-insensitive tag matching
+                        innerBuilder.Append($"EXISTS(SELECT VALUE t FROM t IN {alias}.{AzureCosmosDbTabularMemoryRecord.TagsField}[\"{pair.Key}\"] WHERE LOWER(t) = {paramName})");
+                        firstInnerCondition = false;
+                    }
+                    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(valueType) && 
+                             valueType != typeof(string)) // strings are IEnumerable<char> so we exclude them
+                    {
+                        // Collection of strings for tag - create OR condition for each value
+                        innerBuilder.Append("(");
+                        bool firstValue = true;
+                        
+                        // Handle any collection type
+                        var enumerable = (System.Collections.IEnumerable)valueObj;
+                        foreach (var item in enumerable)
+                        {
+                            if (item != null)
+                            {
+                                string paramName = $"@p_{parameters.Count}";
+                                parameters.Add(Tuple.Create<string, object>(paramName, item.ToString().ToLowerInvariant()));
+                                
+                                if (!firstValue)
+                                {
+                                    innerBuilder.Append(" OR ");
+                                }
+                                
+                                innerBuilder.Append($"EXISTS(SELECT VALUE t FROM t IN {alias}.{AzureCosmosDbTabularMemoryRecord.TagsField}[\"{pair.Key}\"] WHERE LOWER(t) = {paramName})");
+                                firstValue = false;
+                            }
+                        }
+                        
+                        // Only add closing parenthesis if at least one value was processed
+                        if (!firstValue)
+                        {
+                            innerBuilder.Append(")");
+                            firstInnerCondition = false;
+                        }
+                        else
+                        {
+                            // Skip this condition if no valid values in collection
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        // For non-string values (e.g., numbers, booleans)
+                        string paramName = $"@p_{parameters.Count}";
+                        parameters.Add(Tuple.Create<string, object>(paramName, pair.Value));
+                        
+                        innerBuilder.Append($"EXISTS(SELECT VALUE t FROM t IN {alias}.{AzureCosmosDbTabularMemoryRecord.TagsField}[\"{pair.Key}\"] WHERE t = {paramName})");
+                        firstInnerCondition = false;
+                    }
                 }
             }
 
@@ -1524,11 +1744,14 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         bool withEmbeddings = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // The schema ID in the database might be stored as a list of strings
+        // For the query, we need to handle this by using a nested query to check for the value
         var sql = $"""
                    SELECT TOP @limit
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
                    FROM c
-                   WHERE c.schemaId = @schemaId
+                   WHERE (IS_STRING(c.schemaId) AND c.schemaId = @schemaId)
+                      OR (IS_ARRAY(c.schemaId) AND EXISTS(SELECT VALUE t FROM t IN c.schemaId WHERE t = @schemaId))
                    """;
 
         var queryDefinition = new QueryDefinition(sql)
@@ -1566,11 +1789,14 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
         bool withEmbeddings = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // The import batch ID in the database might be stored as a list of strings
+        // For the query, we need to handle this by using a nested query to check for the value
         var sql = $"""
                    SELECT TOP @limit
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
                    FROM c
-                   WHERE c.importBatchId = @importBatchId
+                   WHERE (IS_STRING(c.importBatchId) AND c.importBatchId = @importBatchId)
+                      OR (IS_ARRAY(c.importBatchId) AND EXISTS(SELECT VALUE t FROM t IN c.importBatchId WHERE t = @importBatchId))
                    """;
 
         var queryDefinition = new QueryDefinition(sql)
@@ -1624,7 +1850,44 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
                 
                 if (record != null && record.schemaId != null)
                 {
-                    string schemaId = record.schemaId.ToString();
+                    // Handle different types of schemaId values
+                    string schemaId;
+                    
+                    // Get the actual type of the schemaId object
+                    object schemaIdObj = record.schemaId;
+                    Type schemaIdType = schemaIdObj.GetType();
+                    
+                    if (schemaIdType == typeof(string))
+                    {
+                        // Handle string type
+                        schemaId = (string)schemaIdObj;
+                        this._logger.LogDebug("SchemaId is a string: {SchemaId}", schemaId);
+                    }
+                    else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(schemaIdType) && 
+                             schemaIdType != typeof(string)) // strings are IEnumerable<char> so we exclude them
+                    {
+                        // Handle any collection type
+                        var enumerable = (System.Collections.IEnumerable)schemaIdObj;
+                        var enumerator = enumerable.GetEnumerator();
+                        
+                        if (enumerator.MoveNext() && enumerator.Current != null)
+                        {
+                            schemaId = enumerator.Current.ToString()!;
+                            this._logger.LogDebug("Extracted schema ID from collection: {SchemaId}", schemaId);
+                        }
+                        else
+                        {
+                            this._logger.LogWarning("Schema ID collection is empty for record {RecordId}", recordId);
+                            return null;
+                        }
+                    }
+                    else
+                    {
+                        // Handle any other type by converting to string
+                        schemaId = schemaIdObj.ToString();
+                        this._logger.LogDebug("Using schema ID as string (type: {Type}): {SchemaId}", 
+                            schemaIdType.Name, schemaId);
+                    }
                     
                     // Now get the schema by ID
                     var schemaQueryDefinition = new QueryDefinition(
@@ -1688,40 +1951,92 @@ internal sealed class AzureCosmosDbTabularMemory : IMemoryDb
     {
         var result = new List<(string Value, int Count)>();
 
-        // Determine the field path based on the field type
-        string fieldPath = fieldType.Equals("tag", StringComparison.OrdinalIgnoreCase)
-            ? $"c.{AzureCosmosDbTabularMemoryRecord.TagsField}[\"{fieldName}\"]"
-            : $"c.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]";
-
-        // Query for the top values of the specified field
-        var sql = $@"
-            SELECT {fieldPath} as value, COUNT(1) as count
-            FROM c
-            WHERE IS_DEFINED({fieldPath})
-            GROUP BY {fieldPath}
-            ORDER BY count DESC
-            OFFSET 0 LIMIT {limit}
-        ";
-
-        var queryDefinition = new QueryDefinition(sql);
-
         try
         {
-            using var feedIterator = this._cosmosClient
-                .GetDatabase(this._databaseName)
-                .GetContainer(index)
-                .GetItemQueryIterator<dynamic>(queryDefinition);
-
-            while (feedIterator.HasMoreResults)
+            // For tag fields we need a different approach since they're arrays
+            if (fieldType.Equals("tag", StringComparison.OrdinalIgnoreCase))
             {
-                var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                // For tags, we need to unnest the array to count values
+                var tagSql = $@"
+                    SELECT VALUE t FROM c
+                    JOIN t IN c.{AzureCosmosDbTabularMemoryRecord.TagsField}[""{fieldName}""]
+                    WHERE IS_DEFINED(c.{AzureCosmosDbTabularMemoryRecord.TagsField}[""{fieldName}""])
+                ";
 
-                foreach (var item in response)
+                var unnestQuery = new QueryDefinition(tagSql);
+                
+                // First fetch all tag values
+                var tagValues = new Dictionary<string, int>();
+                
+                using var tagIterator = this._cosmosClient
+                    .GetDatabase(this._databaseName)
+                    .GetContainer(index)
+                    .GetItemQueryIterator<string>(unnestQuery);
+                
+                // Count occurrences of each value
+                while (tagIterator.HasMoreResults)
                 {
-                    string value = item.value.ToString();
-                    int count = (int)item.count;
+                    var tagResponse = await tagIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                    
+                    foreach (var tagValue in tagResponse)
+                    {
+                        if (tagValue != null)
+                        {
+                            string valueStr = tagValue.ToString();
+                            if (tagValues.ContainsKey(valueStr))
+                            {
+                                tagValues[valueStr]++;
+                            }
+                            else
+                            {
+                                tagValues[valueStr] = 1;
+                            }
+                        }
+                    }
+                }
+                
+                // Sort by count and take the top 'limit' values
+                result = tagValues
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Take(limit)
+                    .Select(kvp => (kvp.Key, kvp.Value))
+                    .ToList();
+            }
+            else
+            {
+                // For data fields, we can use traditional grouping
+                string fieldPath = $"c.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]";
+                
+                // Query for the top values of the specified field
+                var sql = $@"
+                    SELECT {fieldPath} as value, COUNT(1) as count
+                    FROM c
+                    WHERE IS_DEFINED({fieldPath})
+                    GROUP BY {fieldPath}
+                    ORDER BY count DESC
+                    OFFSET 0 LIMIT {limit}
+                ";
 
-                    result.Add((value, count));
+                var queryDefinition = new QueryDefinition(sql);
+
+                using var feedIterator = this._cosmosClient
+                    .GetDatabase(this._databaseName)
+                    .GetContainer(index)
+                    .GetItemQueryIterator<dynamic>(queryDefinition);
+
+                while (feedIterator.HasMoreResults)
+                {
+                    var response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+
+                    foreach (var item in response)
+                    {
+                        if (item.value != null)
+                        {
+                            string valueStr = item.value.ToString() ?? "";
+                            int count = (int)item.count;
+                            result.Add((valueStr, count));
+                        }
+                    }
                 }
             }
         }

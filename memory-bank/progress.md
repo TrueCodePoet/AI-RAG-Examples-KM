@@ -52,6 +52,13 @@ The project is in a functional prototype stage, with core components implemented
 - ❌ Cross-document queries
 - ❌ Query history and caching
 
+### Search Enhancement Plans (Added 2025-04-09)
+- ❌ Fuzzy Matching for Field Values - Allow partial matches using CONTAINS/STARTSWITH operators
+- ❌ Field Normalization - Case-insensitive matching and text normalization
+- ❌ Synonym Handling - Enhance LLM prompt to generate alternative values and use IN clauses
+- ❌ Filter Expansion - Auto-expand filters based on column metadata from schema
+- ❌ Schema Information Enhancement - Include more examples and variations in prompt
+
 ### User Interface
 - ❌ Web-based query interface
 - ❌ Visualization of query results

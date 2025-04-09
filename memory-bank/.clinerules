@@ -170,6 +170,39 @@
 - Use object parameters with casting for public methods that need to work with internal types
 - Avoid exposing internal types in public method signatures
 
+#### "Collection type pattern matching issues"
+- **Problem**: C# 8's pattern matching syntax can fail with errors like `error CS8121: An expression of type 'List<string?>' cannot be handled by a pattern of type 'string'` when working with nullable generic collections
+- **Solution**: Instead of using pattern matching, use a more robust type-checking approach:
+  1. Get the runtime type using `GetType()` on the object
+  2. Check for string type first with `object.GetType() == typeof(string)`
+  3. For collections, use `typeof(System.Collections.IEnumerable).IsAssignableFrom(type) && type != typeof(string)`
+  4. Extract values using `GetEnumerator()` and `MoveNext()` for collections
+  5. Fall back to `ToString()` for other types
+- Example:
+  ```csharp
+  // Instead of this problematic pattern matching:
+  if (obj is string strValue) {
+      // Handle string
+  } else if (obj is List<string> listValue) {
+      // Handle list - might fail with nullable generic types
+  }
+  
+  // Use this robust approach:
+  object objValue = obj;
+  Type objType = objValue.GetType();
+  
+  if (objType == typeof(string)) {
+      string strValue = (string)objValue;
+      // Handle string
+  } else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(objType) && 
+           objType != typeof(string)) {
+      var enumerable = (System.Collections.IEnumerable)objValue;
+      var enumerator = enumerable.GetEnumerator();
+      // Handle collection by using the enumerator
+  }
+  ```
+- This approach is more robust and works consistently with all collection types including nullable generic types
+
 #### "Empty source dictionary"
 - This issue has been fixed by improving the text field parsing in AzureCosmosDbTabularMemory
 - The code now extracts metadata (worksheet, row, schema ID, import batch ID) from the text field first
