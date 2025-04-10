@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.KernelMemory;
+﻿﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -10,8 +10,9 @@ using System.Text.Json; // For JsonSerializer
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 using Microsoft.SemanticKernel.Connectors.OpenAI; // For MemoryFilter
 
-//const string IndexName = "sc-seoaichat-sv-index-DSS-KernelMemory";
-const string IndexName = "sc-seoaichat-sv-index-DSS-KernelMemory-Tabular";
+// Define index names for both pipeline types
+const string TabularIndexName = "sc-seoaichat-sv-index-DSS-KernelMemory-Tabular";
+const string StandardIndexName = "sc-seoaichat-sv-index-DSS-KernelMemory-Standard";
  
 // Define the local directory path where blobs will be saved
 string LocalDownloadPath = @"D:\Temp\BLOB";
@@ -19,59 +20,103 @@ string LocalDownloadPath = @"D:\Temp\BLOB";
 // Load configuration using the helper class
 var appConfig = KernelInitializer.LoadConfiguration();
  
-// Initialize Kernel and Memory using the helper class
+// Initialize Kernel for both pipelines to share
 var kernel = KernelInitializer.InitializeKernel(appConfig.AzureOpenAITextConfig);
-var memory = KernelInitializer.InitializeMemory(
+
+// Initialize both memory pipelines
+Console.WriteLine("Initializing dual memory pipelines...");
+
+// 1. Tabular Memory Pipeline
+var tabularMemory = KernelInitializer.InitializeMemory(
     appConfig.AzureOpenAITextConfig, 
     appConfig.AzureOpenAIEmbeddingConfig, 
-    appConfig.CosmosDbSettings,
-    IndexName); // Pass the index name to use as dataset name
- 
-// Get the IMemoryDb instance from the memory object
-var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(memory);
-if (memoryDb != null)
+    appConfig.CosmosDbTabularSettings,
+    appConfig.CosmosDbStandardSettings,
+    useTabularPipeline: true,
+    TabularIndexName);
+
+// 2. Standard Memory Pipeline
+var standardMemory = KernelInitializer.InitializeMemory(
+    appConfig.AzureOpenAITextConfig, 
+    appConfig.AzureOpenAIEmbeddingConfig, 
+    appConfig.CosmosDbTabularSettings,
+    appConfig.CosmosDbStandardSettings,
+    useTabularPipeline: false,
+    StandardIndexName);
+
+// Set up TabularExcelDecoder for the tabular pipeline
+var tabularMemoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(tabularMemory);
+if (tabularMemoryDb != null)
 {
-    Console.WriteLine("Successfully obtained IMemoryDb instance");
+    Console.WriteLine("Successfully obtained IMemoryDb instance for tabular pipeline");
     
     // Find and update TabularExcelDecoder instances in the pipeline
-    MemoryHelper.SetMemoryOnTabularExcelDecoders(memory, memoryDb);
+    MemoryHelper.SetMemoryOnTabularExcelDecoders(tabularMemory, tabularMemoryDb);
 }
 else
 {
-    Console.WriteLine("Warning: Could not obtain IMemoryDb instance");
+    Console.WriteLine("Warning: Could not obtain IMemoryDb instance for tabular pipeline");
 }
 
-// Create an instance of BlobStorageProcessor
-var fileProcessor = new BlobStorageProcessor(
-    memory, 
+// Create BlobStorageProcessor instances for each pipeline
+var tabularFileProcessor = new BlobStorageProcessor(
+    tabularMemory, 
     appConfig.BlobStorageSettings, 
-    IndexName, 
+    TabularIndexName, 
     LocalDownloadPath);
 
-// Create an instance of KernelMemoryQueryProcessor
-var queryProcessor = new KernelMemoryQueryProcessor(
-    memory,
+var standardFileProcessor = new BlobStorageProcessor(
+    standardMemory, 
+    appConfig.BlobStorageSettings, 
+    StandardIndexName, 
+    LocalDownloadPath);
+
+// Create query processors for both pipelines
+var tabularQueryProcessor = new KernelMemoryQueryProcessor(
+    tabularMemory,
     kernel,
-    IndexName,
+    TabularIndexName,
     appConfig.AzureOpenAITextConfig);
 
-// This section indexes from the blob storage
-// await fileProcessor.ProcessBlobsFromStorageAsync();
- 
-// This section indexes from local File system
-await fileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
- 
-// This section allows you to query Kernel Memory directly
+var standardQueryProcessor = new KernelMemoryQueryProcessor(
+    standardMemory,
+    kernel,
+    StandardIndexName,
+    appConfig.AzureOpenAITextConfig);
+
+// This section demonstrates processing the same files through both pipelines
+Console.WriteLine("\n*** Processing files through both pipelines ***");
+
+// Option 1: Process files from blob storage 
+// await tabularFileProcessor.ProcessBlobsFromStorageAsync();
+// await standardFileProcessor.ProcessBlobsFromStorageAsync();
+
+// Option 2: Process files from local file system
+Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
+await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
+
+Console.WriteLine("\n*** Processing through Standard Pipeline ***");
+await standardFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
+
+// This section allows you to query both Kernel Memory indexes
 await QueryKernelMemory();
 
-// Query Kernel Memory
+// Query both Kernel Memory pipelines
 async Task QueryKernelMemory()
 {
     string Question = @"Give me a list of all server names with a Server Purpose of 'Corelight Network monitoring sensor'.
-    It is important to return the full list. I expect that their are over 40.";
+    It is important to return the full list. I expect that there are over 40.";
 
-    Console.WriteLine($"Searching for: {Question}");
-    await queryProcessor.AskTabularQuestionAsync(Question);
+    Console.WriteLine($"\n*** Searching Tabular Index for: {Question} ***");
+    await tabularQueryProcessor.AskTabularQuestionAsync(Question);
+    
+    Console.WriteLine($"\n*** Searching Standard Index for: {Question} ***");
+    await standardQueryProcessor.AskQuestionAsync(Question);
+    
+    // In a production system, you might want to:
+    // 1. Query both indexes in parallel
+    // 2. Compare or combine results
+    // 3. Present a unified answer
 }
 
 // Configuration class defined at the bottom

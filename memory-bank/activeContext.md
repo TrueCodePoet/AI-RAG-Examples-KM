@@ -121,6 +121,20 @@ The project is currently focused on implementing and testing the tabular data pr
     - Added SetMemoryOnTabularExcelDecoders method to inject the IMemoryDb into TabularExcelDecoder instances
     - This approach is a workaround for pipeline initialization limitations but introduces reliance on internal implementation details
 
+13. **Text Concatenation in Payload**: Addressed issue where the `text` field in stored records contained concatenated text from multiple rows:
+    - Improved `ParseSentenceFormat` method to detect multiple record patterns in text
+    - Added logic to truncate text at the second record pattern if concatenation is detected
+    - Added additional logging to track data flowing through the system
+    - This ensures only relevant data from the first record gets extracted into the data dictionary
+
+14. **Dual Pipeline Implementation**: Added support for maintaining both standard and tabular pipelines:
+    - Created separate memory instances for tabular and standard processing approaches
+    - Modified `KernelSetup.cs` to conditionally configure `AzureCosmosDbTabularMemory` with different settings
+    - Added or omitted the `TextPartitioningHandler` based on the pipeline type
+    - Updated `Program.cs` to process documents through both pipelines
+    - Used different index names to maintain separate collections of data
+    - This allows processing the same documents with different approaches based on document type
+
 ## Rate Limiting Considerations
 
 When processing large Excel files, the system may encounter rate limiting from Azure OpenAI services. This manifests as warning logs like:

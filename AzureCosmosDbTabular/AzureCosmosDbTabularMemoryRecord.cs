@@ -364,9 +364,26 @@ internal class AzureCosmosDbTabularMemoryRecord
     // Parse text in the sentence format: "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
     private static void ParseSentenceFormat(string text, Dictionary<string, object> data, Dictionary<string, string> source)
     {
+        Console.WriteLine($"ParseSentenceFormat: Full text length: {text.Length} characters");
         Console.WriteLine($"ParseSentenceFormat: Parsing text: {text.Substring(0, Math.Min(100, text.Length))}...");
         
-        // Extract worksheet name and row number using regex
+        // First, find all occurrences of the record pattern to detect concatenated text
+        var allMatches = s_worksheetRowRegex.Matches(text);
+        Console.WriteLine($"ParseSentenceFormat: Found {allMatches.Count} record pattern matches in text");
+        
+        if (allMatches.Count > 1)
+        {
+            // Multiple matches detected - text contains multiple concatenated records
+            Console.WriteLine("ParseSentenceFormat: WARNING - Detected multiple record patterns in text!");
+            Console.WriteLine("ParseSentenceFormat: Will only process the first record pattern match");
+            
+            // Truncate text to only include the first record pattern through to the start of the second pattern
+            int secondMatchStart = allMatches[1].Index;
+            text = text.Substring(0, secondMatchStart);
+            Console.WriteLine($"ParseSentenceFormat: Truncated text to first {secondMatchStart} characters");
+        }
+        
+        // Extract worksheet name and row number using regex - use the first match
         var worksheetRowMatch = s_worksheetRowRegex.Match(text);
         if (worksheetRowMatch.Success)
         {
@@ -380,11 +397,23 @@ internal class AzureCosmosDbTabularMemoryRecord
                 Console.WriteLine($"ParseSentenceFormat: Extracted worksheet={worksheet}, row={rowNum}");
                 
                 // Extract the data section (everything after the colon)
-                int colonIndex = text.IndexOf(':');
+                // Ensure we're using the first colon that belongs to our matched pattern
+                int matchEndIndex = worksheetRowMatch.Index + worksheetRowMatch.Length;
+                int colonIndex = text.IndexOf(':', worksheetRowMatch.Index);
+                
                 if (colonIndex > 0)
                 {
                     string dataSection = text.Substring(colonIndex + 1).Trim();
+                    Console.WriteLine($"ParseSentenceFormat: Isolated data section length: {dataSection.Length} characters");
                     Console.WriteLine($"ParseSentenceFormat: Isolated data section: {dataSection.Substring(0, Math.Min(100, dataSection.Length))}...");
+                    
+                    // Look for the next "Record from worksheet" pattern to stop processing
+                    int nextRecordIndex = dataSection.IndexOf("Record from worksheet", StringComparison.OrdinalIgnoreCase);
+                    if (nextRecordIndex > 0)
+                    {
+                        Console.WriteLine($"ParseSentenceFormat: Found another record pattern at position {nextRecordIndex} in data section - truncating");
+                        dataSection = dataSection.Substring(0, nextRecordIndex);
+                    }
                     
                     // Process the data section manually to avoid regex issues
                     string[] pairs = dataSection.Split(new[] { ". " }, StringSplitOptions.RemoveEmptyEntries);

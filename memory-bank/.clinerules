@@ -48,6 +48,7 @@
 - Schema information is extracted during import and stored in the same container as the data, with special metadata tags to identify schema documents.
 - PivotTable structures in Excel files are now handled gracefully with the SkipPivotTables configuration option (default: true).
 - Source file names for schema generation prioritize the provided file path parameter over the workbook's internal Title property. This ensures accurate source file attribution in the schema even when the Excel file's metadata is generic or missing.
+- The `ParseSentenceFormat` method now handles concatenated text by detecting multiple record patterns and truncating to process only the first record, preventing data bleeding between records.
 
 ### Metadata Extraction
 - The TabularExcelDecoder generates text in a specific format that includes metadata about the record:
@@ -127,12 +128,20 @@
 - Files should include columns for server name, purpose, environment, etc.
 - Both local files and blob storage can be used as data sources
 
+### Dual Pipeline Processing 
+- The application is now capable of maintaining two separate Kernel Memory pipelines:
+  1. **Tabular Pipeline**: Uses `AzureCosmosDbTabularMemory` and omits the `TextPartitioningHandler` to preserve row-based chunks intact. Optimal for structured data like Excel files where preserving the exact structure is important.
+  2. **Standard Pipeline**: Uses the default `AzureCosmosDbMemory` and includes the `TextPartitioningHandler` for optimal embedding-based search across all content. Better for general text documents and semantic search.
+- Each pipeline uses a different Cosmos DB container (via different index names) to store its records
+- Documents can be processed through both pipelines to enable different query approaches on the same data
+- Queries can be directed to either pipeline depending on the type of information needed
+
 ## Common Workflows
 
 ### Adding a New Document Source
 1. Configure the source in appsettings.json
-2. Create an instance of BlobStorageProcessor with appropriate parameters
-3. Call ProcessBlobsFromStorageAsync() or ProcessFilesFromLocalDirectoryAsync()
+2. Create BlobStorageProcessor instances for both tabular and standard pipelines
+3. Call ProcessBlobsFromStorageAsync() or ProcessFilesFromLocalDirectoryAsync() on each processor instance
 
 ### Implementing a Custom Decoder
 1. Create a new class implementing IContentDecoder
