@@ -10,11 +10,25 @@ The project is currently focused on implementing and testing the tabular data pr
 
 ## Recent Changes
 
+### Code Refactoring
+- Refactored the large `AzureCosmosDbTabularMemory.cs` file into multiple partial class files for better maintainability:
+  - Created `AzureCosmosDbTabularMemory.cs` - Core class definition, constructor, and fields
+  - Created `TabularMemoryRecordResult.cs` - Internal result class
+  - Created `AzureCosmosDbTabularMemory.Index.cs` - Index management methods
+  - Created `AzureCosmosDbTabularMemory.RecordOps.cs` - Record operations (Upsert, Get, Delete)
+  - Created `AzureCosmosDbTabularMemory.Query.cs` - Query processing and filtering
+  - Created `AzureCosmosDbTabularMemory.SchemaStorage.cs` - Schema storage and retrieval
+  - Created `AzureCosmosDbTabularMemory.SchemaOperations.cs` - Schema creation and manipulation
+  - Created `AzureCosmosDbTabularMemory.SchemaRecord.cs` - Record-schema relationships
+  - Created `AzureCosmosDbTabularMemory.Utilities.cs` - Helper methods like normalization and type inference
+- This restructuring improves code organization and maintainability while preserving the same functionality
+
 ### Tabular Data Processing
 - Implemented TabularExcelDecoder for specialized Excel file processing
 - Added support for preserving data types and structure during ingestion
 - Created normalized text representation of tabular data for embedding generation
 - Enhanced error handling for PivotTable structures in Excel files
+- Fixed schema generation to prioritize the provided file path over workbook metadata for accurate source file names
 
 ### Cosmos DB Integration
 - Developed AzureCosmosDbTabularMemory implementation for structured data storage
@@ -61,6 +75,8 @@ The project is currently focused on implementing and testing the tabular data pr
 3. **Filter Generation Approach**: Opted for an AI-driven approach to filter generation rather than a rule-based system for greater flexibility.
 4. **Single Container for Schema and Data**: Decided to store schema information in the same container as the data for simplicity and improved data locality.
 5. **Text Field Parsing**: Implemented a robust approach to extract all data (metadata and row data) from the text field using a combination of regex for the prefix and manual string splitting/parsing for the data section.
+6. **Partial Class Organization**: Used C# partial classes to organize the large AzureCosmosDbTabularMemory implementation into logical groupings while maintaining a single cohesive class.
+7. **Filename Priority for Schema Generation**: Modified the `ExtractSchemaFromWorkbook` method to prioritize the provided file path over workbook metadata (Title property) when determining the source file name.
 
 ### Open Questions
 1. **Scaling Strategy**: How to efficiently scale the system for very large datasets?

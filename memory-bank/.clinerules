@@ -47,6 +47,7 @@
 - The `ParseSentenceFormat` method in `AzureCosmosDbTabularMemoryRecord` uses a combination of regex for the prefix extraction and manual string splitting/parsing for the data section to ensure reliable data extraction.
 - Schema information is extracted during import and stored in the same container as the data, with special metadata tags to identify schema documents.
 - PivotTable structures in Excel files are now handled gracefully with the SkipPivotTables configuration option (default: true).
+- Source file names for schema generation prioritize the provided file path parameter over the workbook's internal Title property. This ensures accurate source file attribution in the schema even when the Excel file's metadata is generic or missing.
 
 ### Metadata Extraction
 - The TabularExcelDecoder generates text in a specific format that includes metadata about the record:

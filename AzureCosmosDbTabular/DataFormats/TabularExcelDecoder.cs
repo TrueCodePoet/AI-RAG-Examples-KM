@@ -542,26 +542,8 @@ public sealed class TabularExcelDecoder : IContentDecoder
     {
         string sourceFileName = "excel_import"; // Default value
 
-        // Try to get a more specific name if available
-        try
-        {
-            // Different versions of ClosedXML might have different property structures
-            // This is a safer approach that won't throw exceptions if properties aren't available
-            var workbookName = workbook.Properties.Title;
-            if (!string.IsNullOrEmpty(workbookName))
-            {
-                sourceFileName = Path.GetFileName(workbookName);
-                Console.WriteLine($"Using source file name from workbook title: {sourceFileName}");
-            }
-        }
-        catch (Exception ex)
-        {
-            // Just log and continue with the default name
-            Console.WriteLine($"Could not get workbook title: {ex.Message}");
-        }
-
-        // If title didn't provide a name, try using the source file path if provided
-        if (string.IsNullOrEmpty(workbook.Properties.Title) && !string.IsNullOrEmpty(sourceFilePath))
+        // PRIORITIZE the sourceFilePath parameter if provided
+        if (!string.IsNullOrEmpty(sourceFilePath))
         {
             try
             {
@@ -570,11 +552,36 @@ public sealed class TabularExcelDecoder : IContentDecoder
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Could not get filename from path '{sourceFilePath}': {ex.Message}");
-                // Keep the default "excel_import" if path parsing fails
+                Console.WriteLine($"Could not get filename from path '{sourceFilePath}': {ex.Message}. Falling back.");
+                // Fallback logic below will execute
             }
         }
-        // If both title and path fail, sourceFileName remains "excel_import"
+
+        // FALLBACK to workbook title if sourceFilePath wasn't used or failed
+        if (sourceFileName == "excel_import") // Only check title if we haven't set it from the path
+        {
+            try
+            {
+                var workbookName = workbook.Properties.Title;
+                if (!string.IsNullOrEmpty(workbookName))
+                {
+                    // Use Path.GetFileName in case the title itself is a path
+                    sourceFileName = Path.GetFileName(workbookName);
+                    Console.WriteLine($"Using source file name from workbook title: {sourceFileName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Just log and continue, sourceFileName remains "excel_import"
+                Console.WriteLine($"Could not get workbook title: {ex.Message}");
+            }
+        }
+
+        // If still default after checking path and title, log it
+        if (sourceFileName == "excel_import")
+        {
+            Console.WriteLine("Could not determine source filename from path or title. Using default 'excel_import'.");
+        }
 
         var schema = new TabularDataSchema
         {
