@@ -1,4 +1,4 @@
-﻿﻿﻿using Microsoft.KernelMemory;
+﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -76,7 +76,8 @@ var tabularQueryProcessor = new KernelMemoryQueryProcessor(
     tabularMemory,
     kernel,
     TabularIndexName,
-    appConfig.AzureOpenAITextConfig);
+    appConfig.AzureOpenAITextConfig,
+    tabularMemoryDb); // Pass the memory DB directly to avoid reflection
 
 var standardQueryProcessor = new KernelMemoryQueryProcessor(
     standardMemory,

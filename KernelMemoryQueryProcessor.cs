@@ -17,17 +17,20 @@ namespace AI_RAG_Examples_KM
         private readonly Kernel _kernel;
         private readonly string _indexName;
         private readonly AzureOpenAIConfig _azureOpenAITextConfig;
+        private readonly IMemoryDb? _tabularMemoryDb;
 
         public KernelMemoryQueryProcessor(
             IKernelMemory memory,
             Kernel kernel,
             string indexName,
-            AzureOpenAIConfig azureOpenAITextConfig)
+            AzureOpenAIConfig azureOpenAITextConfig,
+            IMemoryDb? tabularMemoryDb = null)
         {
             _memory = memory;
             _kernel = kernel;
             _indexName = indexName;
             _azureOpenAITextConfig = azureOpenAITextConfig;
+            _tabularMemoryDb = tabularMemoryDb;
         }
 
         public async Task AskQuestionAsync(string question)
@@ -127,9 +130,17 @@ namespace AI_RAG_Examples_KM
             
             try
             {
-                // Create a TabularFilterHelper to access schema functionality
-                // Pass the index name to enable more robust memory DB discovery
-                var filterHelper = new TabularFilterHelper(_memory, _indexName);
+                // Create a TabularFilterHelper with the memory instance provided in constructor if available
+                TabularFilterHelper filterHelper;
+                if (_tabularMemoryDb != null)
+                {
+                    filterHelper = new TabularFilterHelper(_tabularMemoryDb);
+                }
+                else
+                {
+                    // Fall back to the original approach with reflection
+                    filterHelper = new TabularFilterHelper(_memory, _indexName);
+                }
                 
                 // Get list of available datasets
                 var datasetList = await filterHelper.ListDatasetNamesAsync();
@@ -186,8 +197,17 @@ Dataset:";
                 Console.WriteLine($"--- Fetching Schema for: {datasetName} ---");
                 try
                 {
-                    // Re-use or create filter helper instance with index name
-                    var schemaHelper = new TabularFilterHelper(_memory, _indexName);
+                    // Create a TabularFilterHelper with the memory instance provided in constructor if available
+                    TabularFilterHelper schemaHelper;
+                    if (_tabularMemoryDb != null)
+                    {
+                        schemaHelper = new TabularFilterHelper(_tabularMemoryDb);
+                    }
+                    else
+                    {
+                        // Fall back to the original approach with reflection
+                        schemaHelper = new TabularFilterHelper(_memory, _indexName);
+                    }
                     schema = await schemaHelper.GetSchemaAsync(datasetName);
                     if (schema != null)
                     {
@@ -286,7 +306,17 @@ Dataset:";
                         {
                             try
                             {
-                                var filterHelper = new TabularFilterHelper(_memory, _indexName);
+                                // Create a TabularFilterHelper with the memory instance provided in constructor if available
+                                TabularFilterHelper filterHelper;
+                                if (_tabularMemoryDb != null)
+                                {
+                                    filterHelper = new TabularFilterHelper(_tabularMemoryDb);
+                                }
+                                else
+                                {
+                                    // Fall back to the original approach with reflection
+                                    filterHelper = new TabularFilterHelper(_memory, _indexName);
+                                }
                                 var result = await filterHelper.GenerateValidatedFilterAsync(
                                     datasetName, paramDict);
                                 

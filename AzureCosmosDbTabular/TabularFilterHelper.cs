@@ -19,10 +19,39 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// </summary>
 public class TabularFilterHelper
 {
-    private readonly IKernelMemory _memory;
+    // For caching the memory instance between calls
+    private IMemoryDb? _memoryDb;
+    
+    // Core properties
     private readonly ILogger<TabularFilterHelper> _logger;
     private readonly string _indexName;
+    private readonly IKernelMemory? _memory;
 
+    // Property to lazy-load and cache the tabular memory DB
+    private AzureCosmosDbTabularMemory TabularMemoryDb => (AzureCosmosDbTabularMemory)GetTabularMemoryDb();
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TabularFilterHelper"/> class.
+    /// </summary>
+    /// <param name="memoryDb">The memory database instance (must be AzureCosmosDbTabularMemory).</param>
+    /// <param name="logger">Optional logger.</param>
+    public TabularFilterHelper(
+        IMemoryDb memoryDb,
+        ILogger<TabularFilterHelper>? logger = null)
+    {
+        // Verify it's the right type
+        if (IsTabularMemoryDb(memoryDb))
+        {
+            this._memoryDb = memoryDb;
+            this._logger = logger ?? Microsoft.KernelMemory.Diagnostics.DefaultLogger.Factory.CreateLogger<TabularFilterHelper>();
+        }
+        else
+        {
+            throw new ArgumentException(
+                "The provided IMemoryDb must be an AzureCosmosDbTabularMemory instance.", nameof(memoryDb));
+        }
+    }
+    
     /// <summary>
     /// Initializes a new instance of the <see cref="TabularFilterHelper"/> class.
     /// </summary>
@@ -37,6 +66,16 @@ public class TabularFilterHelper
         this._memory = memory;
         this._indexName = indexName;
         this._logger = logger ?? Microsoft.KernelMemory.Diagnostics.DefaultLogger.Factory.CreateLogger<TabularFilterHelper>();
+        
+        // The _memoryDb field will be populated on first use
+    }
+
+    /// <summary>
+    /// Checks if the given IMemoryDb is an AzureCosmosDbTabularMemory instance.
+    /// </summary>
+    private bool IsTabularMemoryDb(IMemoryDb memoryDb)
+    {
+        return memoryDb.GetType().FullName?.Contains("AzureCosmosDbTabularMemory") == true;
     }
 
     /// <summary>
@@ -49,8 +88,8 @@ public class TabularFilterHelper
         string indexName,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get the filterable fields
         return await memoryDb.GetFilterableFieldsAsync(indexName, cancellationToken).ConfigureAwait(false);
@@ -72,8 +111,8 @@ public class TabularFilterHelper
         int limit = 10,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get the top field values
         return await memoryDb.GetTopFieldValuesAsync(indexName, fieldType, fieldName, limit, cancellationToken).ConfigureAwait(false);
@@ -89,8 +128,8 @@ public class TabularFilterHelper
         string datasetName,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get the schema
         return await memoryDb.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
@@ -104,8 +143,8 @@ public class TabularFilterHelper
     public async Task<List<TabularDataSchema>> ListSchemasAsync(
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // List schemas
         return await memoryDb.ListSchemasAsync(cancellationToken).ConfigureAwait(false);
@@ -119,8 +158,8 @@ public class TabularFilterHelper
     public async Task<List<string>> ListDatasetNamesAsync(
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // List dataset names
         return await memoryDb.ListDatasetNamesAsync(cancellationToken).ConfigureAwait(false);
@@ -136,8 +175,8 @@ public class TabularFilterHelper
         string sourceFileName,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get schemas by source file
         return await memoryDb.GetSchemasBySourceFileAsync(sourceFileName, cancellationToken).ConfigureAwait(false);
@@ -153,8 +192,8 @@ public class TabularFilterHelper
         string schemaId,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get schema by ID
         return await memoryDb.GetSchemaByIdAsync(schemaId, cancellationToken).ConfigureAwait(false);
@@ -176,8 +215,8 @@ public class TabularFilterHelper
         bool withEmbeddings = false,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get records by schema ID
         var result = new List<MemoryRecord>();
@@ -205,8 +244,8 @@ public class TabularFilterHelper
         bool withEmbeddings = false,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get records by import batch ID
         var result = new List<MemoryRecord>();
@@ -230,8 +269,8 @@ public class TabularFilterHelper
         string recordId,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Get schema for record
         return await memoryDb.GetSchemaForRecordAsync(indexName, recordId, cancellationToken).ConfigureAwait(false);
@@ -249,8 +288,8 @@ public class TabularFilterHelper
         Dictionary<string, object> parameters,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance
-        var memoryDb = GetTabularMemoryDb();
+        // Get the memory DB instance and cast to tabular memory DB
+        var memoryDb = TabularMemoryDb;
 
         // Validate parameters
         return await memoryDb.ValidateParametersAsync(datasetName, parameters, cancellationToken).ConfigureAwait(false);
@@ -333,36 +372,38 @@ public class TabularFilterHelper
     /// Gets the tabular memory DB instance.
     /// </summary>
     /// <returns>The tabular memory DB instance.</returns>
-    private AzureCosmosDbTabularMemory GetTabularMemoryDb()
+    private IMemoryDb GetTabularMemoryDb()
     {
+        // If we already have a direct IMemoryDb reference from the constructor, use it
+        if (_memoryDb != null)
+        {
+            return _memoryDb;
+        }
+        
+        // If we're using the IKernelMemory constructor, we need to find the IMemoryDb
+        if (_memory == null)
+        {
+            throw new InvalidOperationException(
+                "No memory instance provided. Both _memoryDb and _memory are null.");
+        }
+        
         try
         {
             // Start by trying to get the memory DB instance using the helper method from Program.cs
             var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(this._memory);
             if (memoryDb != null)
             {
-                // Check if it's already an AzureCosmosDbTabularMemory
-                if (memoryDb is AzureCosmosDbTabularMemory tabularMemoryDb)
+                if (IsTabularMemoryDb(memoryDb))
                 {
-                    this._logger.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance directly");
-                    return tabularMemoryDb;
+                    this._logger.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance via helper");
+                    // Cache for future use
+                    this._memoryDb = memoryDb;
+                    return memoryDb;
                 }
-                
-                // If it's an IMemoryDb but not AzureCosmosDbTabularMemory, try to cast it
-                // This might happen if we're using a proxy or decorator pattern
-                try
+                else
                 {
-                    // Try to cast using dynamic to bypass compile-time type checking
-                    dynamic dynamicMemoryDb = memoryDb;
-                    AzureCosmosDbTabularMemory castedMemoryDb = dynamicMemoryDb;
-                    this._logger.LogInformation("Successfully cast IMemoryDb to AzureCosmosDbTabularMemory using dynamic");
-                    return castedMemoryDb;
-                }
-                catch (Exception castEx)
-                {
-                    // If dynamic casting fails, log and continue to next method
-                    this._logger.LogWarning("Could not cast IMemoryDb to AzureCosmosDbTabularMemory: {ErrorType}, {ErrorMessage}", 
-                        castEx.GetType().Name, castEx.Message);
+                    this._logger.LogWarning("MemoryDb is not an AzureCosmosDbTabularMemory instance, it's: {Type}", 
+                        memoryDb.GetType().FullName);
                 }
             }
             else
@@ -370,103 +411,128 @@ public class TabularFilterHelper
                 this._logger.LogWarning("MemoryHelper.GetMemoryDbFromKernelMemory returned null");
             }
             
-            // Try multiple reflection approaches to find the memory DB
-            
-            // 1. Try the standard field name first
-            try
+            // Try reflection approaches
+            var foundMemoryDb = FindTabularMemoryDbViaReflection();
+            if (foundMemoryDb != null)
             {
-                var memoryDbField = this._memory.GetType().GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (memoryDbField != null)
-                {
-                    var reflectedMemoryDb = memoryDbField.GetValue(this._memory);
-                    if (reflectedMemoryDb is AzureCosmosDbTabularMemory reflectedTabularMemoryDb)
-                    {
-                        this._logger.LogInformation("Found AzureCosmosDbTabularMemory instance via _memoryDb field reflection");
-                        return reflectedTabularMemoryDb;
-                    }
-                    else if (reflectedMemoryDb != null)
-                    {
-                        this._logger.LogWarning("_memoryDb field contains a different type: {ActualType}", reflectedMemoryDb.GetType().FullName);
-                    }
-                }
-                else
-                {
-                    this._logger.LogWarning("Could not find _memoryDb field in memory object");
-                }
-            }
-            catch (Exception ex)
-            {
-                this._logger.LogWarning("Error accessing _memoryDb field: {Error}", ex.Message);
+                // Cache for future use
+                this._memoryDb = foundMemoryDb;
+                return foundMemoryDb;
             }
             
-            // 2. Try looking through all private fields for any AzureCosmosDbTabularMemory
-            try
-            {
-                foreach (var field in this._memory.GetType().GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-                {
-                    try
-                    {
-                        var value = field.GetValue(this._memory);
-                        if (value is AzureCosmosDbTabularMemory tabularMemoryDb)
-                        {
-                            this._logger.LogInformation("Found AzureCosmosDbTabularMemory instance in field {FieldName}", field.Name);
-                            return tabularMemoryDb;
-                        }
-                    }
-                    catch (Exception) { /* Ignore individual field access errors */ }
-                }
-            }
-            catch (Exception ex)
-            {
-                this._logger.LogWarning("Error scanning fields for AzureCosmosDbTabularMemory: {Error}", ex.Message);
-            }
-
-            // 3. Try the orchestrator
-            try
-            {
-                var orchestratorProp = this._memory.GetType().GetProperty("Orchestrator");
-                if (orchestratorProp != null)
-                {
-                    var orchestrator = orchestratorProp.GetValue(this._memory);
-                    var orchestratorType = orchestrator?.GetType();
-                    
-                    // Try to find _memoryDb in orchestrator
-                    var orchestratorMemoryDbField = orchestratorType?.GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (orchestratorMemoryDbField != null)
-                    {
-                        var orchestratorMemoryDb = orchestratorMemoryDbField.GetValue(orchestrator);
-                        if (orchestratorMemoryDb is AzureCosmosDbTabularMemory tabularMemoryDb)
-                        {
-                            this._logger.LogInformation("Found AzureCosmosDbTabularMemory instance in orchestrator._memoryDb");
-                            return tabularMemoryDb;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                this._logger.LogWarning("Error accessing orchestrator: {Error}", ex.Message);
-            }
-
-            // We can't easily create a new instance because of the required dependencies
-            // (CosmosClient, ITextEmbeddingGenerator, etc.)
-            if (!string.IsNullOrEmpty(this._indexName))
-            {
-                this._logger.LogError(
-                    "Could not locate an existing AzureCosmosDbTabularMemory instance. " +
-                    "Cannot create a fallback instance due to dependency requirements. " +
-                    "Make sure TabularFilterHelper is being created with the same IKernelMemory " +
-                    "instance used throughout the application.");
-            }
-
-            // If we get here, we haven't found a valid instance and can't create one
+            // We didn't find a valid TabularMemoryDb
             throw new InvalidOperationException(
-                "Could not find or create an AzureCosmosDbTabularMemory instance. Provide an index name in the constructor to enable fallback instance creation.");
+                $"Could not find AzureCosmosDbTabularMemory instance in IKernelMemory. " +
+                $"Index name was: {this._indexName ?? "(not provided)"}");
         }
         catch (Exception ex)
         {
-            this._logger.LogError(ex, "Error accessing the memory DB instance");
-            throw new InvalidOperationException("Could not access the memory DB instance.", ex);
+            this._logger.LogError(ex, "Error locating tabular memory DB instance");
+            throw new InvalidOperationException("Failed to locate tabular memory DB instance.", ex);
         }
+    }
+    
+    /// <summary>
+    /// Tries to find the tabular memory DB instance via reflection.
+    /// </summary>
+    private IMemoryDb? FindTabularMemoryDbViaReflection()
+    {
+        if (_memory == null)
+        {
+            return null;
+        }
+        
+        // 1. Try the standard field name first
+        try
+        {
+            var memoryDbField = this._memory.GetType().GetField("_memoryDb", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                
+            if (memoryDbField != null)
+            {
+                var reflectedMemoryDb = memoryDbField.GetValue(this._memory);
+                if (reflectedMemoryDb is IMemoryDb memoryDb && IsTabularMemoryDb(memoryDb))
+                {
+                    this._logger.LogInformation("Found TabularMemoryDb via _memoryDb field reflection");
+                    return memoryDb;
+                }
+                else if (reflectedMemoryDb != null)
+                {
+                    this._logger.LogWarning("_memoryDb field contains a different type: {ActualType}", 
+                        reflectedMemoryDb.GetType().FullName);
+                }
+            }
+            else
+            {
+                this._logger.LogWarning("Could not find _memoryDb field in memory object");
+            }
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning("Error accessing _memoryDb field: {Error}", ex.Message);
+        }
+        
+        // 2. Try looking through all private fields
+        try
+        {
+            foreach (var field in this._memory.GetType().GetFields(
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+            {
+                try
+                {
+                    var value = field.GetValue(this._memory);
+                    if (value is IMemoryDb memoryDb && IsTabularMemoryDb(memoryDb))
+                    {
+                        this._logger.LogInformation("Found TabularMemoryDb in field {FieldName}", field.Name);
+                        return memoryDb;
+                    }
+                }
+                catch (Exception) { /* Ignore individual field access errors */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning("Error scanning fields: {Error}", ex.Message);
+        }
+
+        // 3. Try the orchestrator
+        try
+        {
+            var orchestratorProp = this._memory.GetType().GetProperty("Orchestrator");
+            if (orchestratorProp != null)
+            {
+                var orchestrator = orchestratorProp.GetValue(this._memory);
+                if (orchestrator != null)
+                {
+                    var orchestratorType = orchestrator.GetType();
+                    
+                    // Try to find _memoryDb in orchestrator
+                    var orchestratorMemoryDbField = orchestratorType.GetField("_memoryDb", 
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        
+                    if (orchestratorMemoryDbField != null)
+                    {
+                        var orchestratorMemoryDb = orchestratorMemoryDbField.GetValue(orchestrator);
+                        if (orchestratorMemoryDb is IMemoryDb memoryDb && IsTabularMemoryDb(memoryDb))
+                        {
+                            this._logger.LogInformation("Found TabularMemoryDb in orchestrator._memoryDb");
+                            return memoryDb;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning("Error accessing orchestrator: {Error}", ex.Message);
+        }
+        
+        // Nothing found
+        this._logger.LogError(
+            "Could not find TabularMemoryDb instance in IKernelMemory. " +
+            "Make sure TabularFilterHelper is being created with the same IKernelMemory " +
+            "instance used throughout the application.");
+            
+        return null;
     }
 }
