@@ -70,23 +70,71 @@ internal sealed partial class AzureCosmosDbTabularMemory
                         {
                             // For string values
                             string stringValue = (string)valueObj;
-                            bool useFuzzyMatch = stringValue.Length > 1;
                             string paramName = $"@p_{parameters.Count}";
                             
-                            // Add parameter with lowercase value for case-insensitive matching
-                            parameters.Add(Tuple.Create<string, object>(paramName, stringValue.ToLowerInvariant()));
+                            // Determine whether to use fuzzy matching based on config and string length
+                            bool useFuzzyMatch = this._config.FuzzyMatch.Enabled && 
+                                              stringValue.Length >= this._config.FuzzyMatch.MinimumLength;
+                            
+                            // Create the parameter value based on the operator and case sensitivity
+                            string paramValue = stringValue;
+                            if (useFuzzyMatch && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+                            {
+                                // For LIKE operator, convert spaces to % and add wildcards at start/end
+                                paramValue = "%" + stringValue.Replace(" ", "%") + "%";
+                            }
+                            
+                            // Apply case conversion for case-insensitive matching if configured
+                            if (this._config.FuzzyMatch.CaseInsensitive)
+                            {
+                                paramValue = paramValue.ToLowerInvariant();
+                            }
+                            
+                            // Add parameter
+                            parameters.Add(Tuple.Create<string, object>(paramName, paramValue));
 
-                            // Determine operator based on data type and content
+                            // Build the appropriate condition based on matching settings
                             if (useFuzzyMatch)
                             {
-                                // For string values, use CONTAINS and case-insensitive matching
-                                innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]), {paramName})");
-                                this._logger.LogDebug("Using fuzzy matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
+                                if (this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Using LIKE operator for pattern matching
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) LIKE {paramName}");
+                                    }
+                                    else
+                                    {
+                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] LIKE {paramName}");
+                                    }
+                                    this._logger.LogDebug("Using LIKE pattern matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
+                                }
+                                else
+                                {
+                                    // Default is CONTAINS for substring matching
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]), {paramName})");
+                                    }
+                                    else
+                                    {
+                                        innerBuilder.Append($"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"], {paramName})");
+                                    }
+                                    this._logger.LogDebug("Using CONTAINS fuzzy matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
+                                }
                             }
                             else
                             {
-                                // For short strings, use equality with lowercase transform
-                                innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) = {paramName}");
+                                // For non-fuzzy matching, use equality with case sensitivity setting
+                                if (this._config.FuzzyMatch.CaseInsensitive)
+                                {
+                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) = {paramName}");
+                                }
+                                else
+                                {
+                                    innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] = {paramName}");
+                                }
+                                this._logger.LogDebug("Using exact matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
                             }
                         }
                         else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(valueType) && 

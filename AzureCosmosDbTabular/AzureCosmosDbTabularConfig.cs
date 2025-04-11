@@ -43,6 +43,38 @@ public sealed class AzureCosmosDbTabularConfig
     public bool ExtractSchemaOnImport { get; init; } = true;
 
     /// <summary>
+    /// Fuzzy matching settings for string comparison.
+    /// </summary>
+    public FuzzyMatchSettings FuzzyMatch { get; init; } = new FuzzyMatchSettings();
+
+    /// <summary>
+    /// Settings for fuzzy string matching.
+    /// </summary>
+    public class FuzzyMatchSettings
+    {
+        /// <summary>
+        /// Whether to use fuzzy matching for string fields. Defaults to false.
+        /// </summary>
+        public bool Enabled { get; init; } = false;
+
+        /// <summary>
+        /// Whether to make fuzzy matches case-insensitive. Defaults to true.
+        /// </summary>
+        public bool CaseInsensitive { get; init; } = true;
+
+        /// <summary>
+        /// The minimum length of string values to trigger fuzzy matching. Defaults to 2.
+        /// </summary>
+        public int MinimumLength { get; init; } = 2;
+
+        /// <summary>
+        /// The operator to use for fuzzy matching. 
+        /// Options: "CONTAINS", "LIKE". Defaults to "CONTAINS".
+        /// </summary>
+        public string Operator { get; init; } = "CONTAINS";
+    }
+
+    /// <summary>
     /// Default JSON serializer options.
     /// </summary>
     internal static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new()

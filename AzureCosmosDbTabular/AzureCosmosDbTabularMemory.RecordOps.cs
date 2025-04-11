@@ -398,7 +398,20 @@ internal sealed partial class AzureCosmosDbTabularMemory
             queryDefinition = queryDefinition.WithParameter(name, value);
         }
 
+        // Enhanced debug logging for the query and parameters
         this._logger.LogTrace("Executing vector search query: {Query}", queryDefinition.QueryText);
+        
+        // Output to console for debugging
+        Console.WriteLine("--- COSMOS DB QUERY DEBUG ---");
+        Console.WriteLine($"SQL Query: {queryDefinition.QueryText}");
+        Console.WriteLine("Parameters:");
+        Console.WriteLine($"  @limit: {limit}");
+        Console.WriteLine($"  @queryEmbedding: [Vector with {queryEmbedding.Data.Length} dimensions]");
+        foreach (var (name, value) in filterParameters)
+        {
+            Console.WriteLine($"  {name}: {value}");
+        }
+        Console.WriteLine("--- END QUERY DEBUG ---");
 
         // Execute the query
         using var feedIterator = this._cosmosClient
@@ -469,6 +482,20 @@ internal sealed partial class AzureCosmosDbTabularMemory
         {
             queryDefinition.WithParameter(name, value);
         }
+
+        // Enhanced debug logging for the non-vector query
+        this._logger.LogTrace("Executing plain query: {Query}", queryDefinition.QueryText);
+        
+        // Output to console for debugging
+        Console.WriteLine("--- COSMOS DB PLAIN QUERY DEBUG ---");
+        Console.WriteLine($"SQL Query: {queryDefinition.QueryText}");
+        Console.WriteLine("Parameters:");
+        Console.WriteLine($"  @limit: {limit}");
+        foreach (var (name, value) in parameters)
+        {
+            Console.WriteLine($"  {name}: {value}");
+        }
+        Console.WriteLine("--- END QUERY DEBUG ---");
 
         using var feedIterator = this._cosmosClient
             .GetDatabase(this._databaseName)
