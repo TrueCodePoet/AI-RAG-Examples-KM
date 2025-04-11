@@ -220,7 +220,6 @@ Dataset:";
 
         Available Schema Fields (use these exact keys):
         {{$schemaInfo}}
-        {{!-- End of Schema Info --}}
 
         RULES FOR OUTPUT KEYS:
         1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
@@ -234,20 +233,19 @@ Dataset:";
         DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
 
         EXAMPLES:
-        {{!-- Examples are less critical now schema is provided, but can still help --}}
-        Question: Show me production servers. {{!-- Assuming 'environment' is a tag or 'data.environment' is in schema --}}
+        Question: Show me production servers.
         Output: {""data.environment"": ""Production""}
 
-        Question: List all servers for the 'Phoenix' project. {{!-- Assuming 'project' is a tag --}}
+        Question: List all servers for the 'Phoenix' project.
         Output: {""project"": ""Phoenix""}
 
-        Question: What is the server purpose for VAXVNAGG01? {{!-- Assuming 'data.server_name' is in schema --}}
+        Question: What is the server purpose for VAXVNAGG01?
         Output: {""data.server_name"": ""VAXVNAGG01""}
 
         Question: Tell me about the system architecture.
         Output: {}
 
-        Question: {{ $input }}
+        Question: {{$input}}
         Output:
         ";
 
