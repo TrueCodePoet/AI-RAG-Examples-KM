@@ -378,8 +378,9 @@ internal sealed partial class AzureCosmosDbTabularMemory
         // Process filters to extract both standard tag filters and structured data filters
         var (whereCondition, filterParameters) = this.ProcessFilters("c", filters);
 
-        // Construct the vector search query using the root path
-        string vectorFieldQueryPath = $"c.{AzureCosmosDbTabularMemoryRecord.VectorField}";
+        // Construct the vector search query using the right field name c.vector
+        // Note: VectorField is defined as "embedding" but the actual property is Vector which serializes to "vector"
+        string vectorFieldQueryPath = $"c.vector";
         
         // Determine if we should use a limit
         string topClause = limit > 0 ? $"TOP @limit" : "";
@@ -437,11 +438,44 @@ internal sealed partial class AzureCosmosDbTabularMemory
             {
                 response = await feedIterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (CosmosException ex) when (ex.Message.Contains("VectorDistance"))
+            catch (CosmosException ex)
             {
-                // Provide a more specific error if VectorDistance fails (e.g., index not configured correctly)
-                this._logger.LogError(ex, "Vector search failed. Ensure the vector index path '/{VectorField}' is correctly configured on container '{Index}'.", AzureCosmosDbTabularMemoryRecord.VectorField, index); // Updated log message path
-                // Re-throw or handle as appropriate, here we break the loop
+                // Provide detailed error information for easier troubleshooting
+                if (ex.Message.Contains("VectorDistance"))
+                {
+                    this._logger.LogError(ex, 
+                        "Vector search failed on container '{Index}'. The vector index path '/vector' may not be properly configured. " +
+                        "SQL: {SqlQuery}. Error details: {ErrorMessage}. " +
+                        "Make sure you have created a vector index on the 'vector' field in your Cosmos DB container.",
+                        index, queryDefinition.QueryText, ex.Message);
+                    
+                    Console.WriteLine("--- COSMOS DB VECTOR SEARCH ERROR ---");
+                    Console.WriteLine($"Error Message: {ex.Message}");
+                    Console.WriteLine($"Status Code: {ex.StatusCode}");
+                    Console.WriteLine($"Activity ID: {ex.ActivityId}");
+                    Console.WriteLine($"Request Charge: {ex.RequestCharge} RUs");
+                    Console.WriteLine("Possible solutions:");
+                    Console.WriteLine("1. Verify your Cosmos DB container has a vector index on the 'vector' field");
+                    Console.WriteLine("2. Check that vectorization is enabled for your Cosmos DB account");
+                    Console.WriteLine("3. Ensure vector dimensions match between stored data and queries");
+                    Console.WriteLine("4. Confirm your Azure region supports vector search capabilities");
+                    Console.WriteLine("--- END ERROR DETAILS ---");
+                }
+                else
+                {
+                    this._logger.LogError(ex, 
+                        "Cosmos DB query failed on container '{Index}'. SQL: {SqlQuery}. Error details: {ErrorMessage}",
+                        index, queryDefinition.QueryText, ex.Message);
+                    
+                    Console.WriteLine("--- COSMOS DB QUERY ERROR ---");
+                    Console.WriteLine($"Error Message: {ex.Message}");
+                    Console.WriteLine($"Status Code: {ex.StatusCode}");
+                    Console.WriteLine($"Activity ID: {ex.ActivityId}");
+                    Console.WriteLine($"Request Charge: {ex.RequestCharge} RUs");
+                    Console.WriteLine("--- END ERROR DETAILS ---");
+                }
+                
+                // Break the loop since we encountered an error
                 yield break;
             }
 
