@@ -21,17 +21,21 @@ public class TabularFilterHelper
 {
     private readonly IKernelMemory _memory;
     private readonly ILogger<TabularFilterHelper> _logger;
+    private readonly string _indexName;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabularFilterHelper"/> class.
     /// </summary>
     /// <param name="memory">The kernel memory instance.</param>
+    /// <param name="indexName">The index name to use for operations.</param>
     /// <param name="logger">Optional logger.</param>
     public TabularFilterHelper(
         IKernelMemory memory,
+        string indexName = "",
         ILogger<TabularFilterHelper>? logger = null)
     {
         this._memory = memory;
+        this._indexName = indexName;
         this._logger = logger ?? Microsoft.KernelMemory.Diagnostics.DefaultLogger.Factory.CreateLogger<TabularFilterHelper>();
     }
 
@@ -333,13 +337,14 @@ public class TabularFilterHelper
     {
         try
         {
-            // First try to get the memory DB instance using the helper method from Program.cs
+            // Start by trying to get the memory DB instance using the helper method from Program.cs
             var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(this._memory);
             if (memoryDb != null)
             {
                 // Check if it's already an AzureCosmosDbTabularMemory
                 if (memoryDb is AzureCosmosDbTabularMemory tabularMemoryDb)
                 {
+                    this._logger.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance directly");
                     return tabularMemoryDb;
                 }
                 
@@ -350,29 +355,113 @@ public class TabularFilterHelper
                     // Try to cast using dynamic to bypass compile-time type checking
                     dynamic dynamicMemoryDb = memoryDb;
                     AzureCosmosDbTabularMemory castedMemoryDb = dynamicMemoryDb;
+                    this._logger.LogInformation("Successfully cast IMemoryDb to AzureCosmosDbTabularMemory using dynamic");
                     return castedMemoryDb;
                 }
-                catch
+                catch (Exception castEx)
                 {
-                    // If dynamic casting fails, fall back to the original method
-                    this._logger.LogWarning("Could not cast IMemoryDb to AzureCosmosDbTabularMemory, falling back to reflection");
+                    // If dynamic casting fails, log and continue to next method
+                    this._logger.LogWarning("Could not cast IMemoryDb to AzureCosmosDbTabularMemory: {ErrorType}, {ErrorMessage}", 
+                        castEx.GetType().Name, castEx.Message);
                 }
             }
+            else
+            {
+                this._logger.LogWarning("MemoryHelper.GetMemoryDbFromKernelMemory returned null");
+            }
             
-            // Fall back to the original reflection method
-            var memoryDbField = this._memory.GetType().GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (memoryDbField == null)
+            // Try multiple reflection approaches to find the memory DB
+            
+            // 1. Try the standard field name first
+            try
             {
-                throw new InvalidOperationException("Could not access the memory DB instance.");
+                var memoryDbField = this._memory.GetType().GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (memoryDbField != null)
+                {
+                    var reflectedMemoryDb = memoryDbField.GetValue(this._memory);
+                    if (reflectedMemoryDb is AzureCosmosDbTabularMemory reflectedTabularMemoryDb)
+                    {
+                        this._logger.LogInformation("Found AzureCosmosDbTabularMemory instance via _memoryDb field reflection");
+                        return reflectedTabularMemoryDb;
+                    }
+                    else if (reflectedMemoryDb != null)
+                    {
+                        this._logger.LogWarning("_memoryDb field contains a different type: {ActualType}", reflectedMemoryDb.GetType().FullName);
+                    }
+                }
+                else
+                {
+                    this._logger.LogWarning("Could not find _memoryDb field in memory object");
+                }
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogWarning("Error accessing _memoryDb field: {Error}", ex.Message);
+            }
+            
+            // 2. Try looking through all private fields for any AzureCosmosDbTabularMemory
+            try
+            {
+                foreach (var field in this._memory.GetType().GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                {
+                    try
+                    {
+                        var value = field.GetValue(this._memory);
+                        if (value is AzureCosmosDbTabularMemory tabularMemoryDb)
+                        {
+                            this._logger.LogInformation("Found AzureCosmosDbTabularMemory instance in field {FieldName}", field.Name);
+                            return tabularMemoryDb;
+                        }
+                    }
+                    catch (Exception) { /* Ignore individual field access errors */ }
+                }
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogWarning("Error scanning fields for AzureCosmosDbTabularMemory: {Error}", ex.Message);
             }
 
-            var reflectedMemoryDb = memoryDbField.GetValue(this._memory);
-            if (reflectedMemoryDb is not AzureCosmosDbTabularMemory reflectedTabularMemoryDb)
+            // 3. Try the orchestrator
+            try
             {
-                throw new InvalidOperationException("The memory DB is not an AzureCosmosDbTabularMemory instance.");
+                var orchestratorProp = this._memory.GetType().GetProperty("Orchestrator");
+                if (orchestratorProp != null)
+                {
+                    var orchestrator = orchestratorProp.GetValue(this._memory);
+                    var orchestratorType = orchestrator?.GetType();
+                    
+                    // Try to find _memoryDb in orchestrator
+                    var orchestratorMemoryDbField = orchestratorType?.GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (orchestratorMemoryDbField != null)
+                    {
+                        var orchestratorMemoryDb = orchestratorMemoryDbField.GetValue(orchestrator);
+                        if (orchestratorMemoryDb is AzureCosmosDbTabularMemory tabularMemoryDb)
+                        {
+                            this._logger.LogInformation("Found AzureCosmosDbTabularMemory instance in orchestrator._memoryDb");
+                            return tabularMemoryDb;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogWarning("Error accessing orchestrator: {Error}", ex.Message);
             }
 
-            return reflectedTabularMemoryDb;
+            // We can't easily create a new instance because of the required dependencies
+            // (CosmosClient, ITextEmbeddingGenerator, etc.)
+            if (!string.IsNullOrEmpty(this._indexName))
+            {
+                this._logger.LogError(
+                    "Could not locate an existing AzureCosmosDbTabularMemory instance. " +
+                    "Cannot create a fallback instance due to dependency requirements. " +
+                    "Make sure TabularFilterHelper is being created with the same IKernelMemory " +
+                    "instance used throughout the application.");
+            }
+
+            // If we get here, we haven't found a valid instance and can't create one
+            throw new InvalidOperationException(
+                "Could not find or create an AzureCosmosDbTabularMemory instance. Provide an index name in the constructor to enable fallback instance creation.");
         }
         catch (Exception ex)
         {

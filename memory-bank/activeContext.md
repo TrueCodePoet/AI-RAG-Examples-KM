@@ -91,6 +91,30 @@ The project is currently focused on implementing and testing the tabular data pr
 3. **Memory Usage**: Processing large Excel files can be memory-intensive.
 4. **Response Formatting**: Ensuring responses are well-formatted and user-friendly for tabular data queries.
 5. **Rate Limiting**: Azure OpenAI rate limits can slow down processing of large datasets.
+6. **Vector Field Name Mismatch**: Fixed discrepancy between the field name in constants (embedding) and actual JSON property (vector).
+   - Was causing vector queries to fail as they were looking for the wrong field
+   - Solution: Updated all SQL queries to use the correct field name (c.vector)
+   - Also updated the vector index path in container creation
+7. **VectorDistance Sorting Constraints**: Discovered that Cosmos DB does not support ASC/DESC directives with VectorDistance.
+   - Was causing vector search queries to fail with BadRequest errors
+   - Solution: Removed ASC directive from ORDER BY clauses
+   - Added comments explaining that VectorDistance automatically sorts from most similar to least similar
+8. **Limited Query Results**: Previous implementation only supported fixed-size result sets.
+   - Solution: Modified queries to support limit=0 (unlimited results)
+   - Only include TOP @limit in SQL when limit > 0
+   - Only add @limit parameter when actually using a limit
+   - Changed default limit from 1 to 5 in all query methods for better usability
+
+9. **Memory DB Access in TabularFilterHelper**: Previously, the access to the AzureCosmosDbTabularMemory instance was failing with reflection.
+   - Problem: `TabularFilterHelper.GetTabularMemoryDb()` relied on reflection to obtain the tabular memory database instance
+   - Error: "Could not find _memoryDb field in memory object" when trying to identify datasets for filters
+   - Solution: Enhanced `TabularFilterHelper` with multiple fallback approaches:
+     - Try main `MemoryHelper.GetMemoryDbFromKernelMemory()` method first
+     - Try direct reflection next
+     - Scan all fields and properties recursively
+     - Also check orchestrator for the memory db instance
+     - Made `TabularFilterHelper` accept an index name in constructor for improved context
+     - Updated `KernelMemoryQueryProcessor` to pass the index name to all `TabularFilterHelper` instances
 6. **Excel PivotTable Handling**: Excel files with PivotTables can cause processing errors, now addressed with improved error detection and handling.
 7. **Type Compatibility**: Fixed issues with TabularExcelDecoder where internal/public type accessibility conflicts prevented proper schema extraction.
 8. **Schema Storage**: Fixed issue where TabularExcelDecoder's `_memory` field was null, preventing schema from being saved. Implemented a two-part solution:

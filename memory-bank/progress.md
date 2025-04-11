@@ -106,17 +106,32 @@ The project is in a functional prototype stage, with core components implemented
    - **Workaround**: Simplify queries where possible.
    - **Planned Fix**: Implement query optimization strategies.
 
-2. **Cost Management**: Vector operations in Cosmos DB can be costly.
+2. **Vector Field Mismatch**: Inconsistency between field names in code and serialized JSON.
+   - **Impact**: Vector queries failing with field not found errors.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed by updating all SQL queries to use the correct field name.
+
+3. **VectorDistance Sorting Issues**: Cosmos DB doesn't support ASC/DESC with VectorDistance.
+   - **Impact**: Vector search queries would fail with BadRequest errors.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed by removing ASC directive from ORDER BY clauses.
+
+4. **Limited Results Only**: No support for unlimited query results.
+   - **Impact**: Could only fetch a fixed number of results per query.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed by adding support for limit=0 to return all matching records.
+
+5. **Cost Management**: Vector operations in Cosmos DB can be costly.
    - **Impact**: Higher than expected Azure costs.
    - **Workaround**: Limit the number of documents processed.
    - **Planned Fix**: Implement tiered storage strategies.
 
-3. **Metadata Extraction**: Source dictionary was sometimes empty due to incorrect extraction.
+6. **Metadata Extraction**: Source dictionary was sometimes empty due to incorrect extraction.
    - **Impact**: Missing worksheet, row, schema ID, and import batch ID in records.
    - **Workaround**: None needed, issue has been fixed.
    - **Status**: Fixed with improved text field parsing and fallback mechanisms.
 
-4. **Data Dictionary Population**: Data dictionary was sometimes empty, losing the actual row data.
+7. **Data Dictionary Population**: Data dictionary was sometimes empty, losing the actual row data.
    - **Impact**: Loss of structured data fields and values in memory records.
    - **Workaround**: None needed, issue has been fixed.
    - **Status**: Fixed with proper deserialization of the tabular_data field.
@@ -154,6 +169,11 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-10 | Fixed schema generation to use correct source file names | Completed |
 | 2025-04-10 | Improved text field parsing to handle concatenated records | Completed |
 | 2025-04-10 | Implemented dual pipelines for standard and tabular data | Completed |
+| 2025-04-11 | Fixed vector field name mismatch in Cosmos DB queries | Completed |
+| 2025-04-11 | Fixed VectorDistance sorting issues with Cosmos DB | Completed |
+| 2025-04-11 | Added support for unlimited query results | Completed |
+| 2025-04-11 | Enhanced error handling for vector search failures | Completed |
+| 2025-04-11 | Fixed memory DB access in TabularFilterHelper | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
 | 2025-04-20 | Documentation and examples | In Progress |

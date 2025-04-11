@@ -163,7 +163,21 @@ flowchart TD
    - Improves precision of queries against tabular data
    - Reduces need for exact field name knowledge
 
-5. **Modular Pipeline Architecture**
+5. **Vector Search Optimization**
+   - Uses the correct serialized JSON property name (vector) in SQL queries despite the constant naming (embedding)
+   - Omits sorting directives (ASC/DESC) from VectorDistance function calls in Cosmos DB queries
+   - Supports unlimited query results by conditionally including TOP @limit in SQL
+   - Provides comprehensive error messages for vector search failures with troubleshooting guidance
+   - Uses field paths compatible with Cosmos DB's Vector Index requirements
+
+6. **Robust Memory DB Access**
+   - Enhanced `TabularFilterHelper` with multi-level fallback strategies for accessing the memory DB
+   - Implemented progressive reflection to find the memory DB in multiple possible locations
+   - Added index name parameter to `TabularFilterHelper` constructor for improved context
+   - Updated log messages to provide detailed diagnostic information during memory DB access
+   - Ensured consistent usage of the memory DB access pattern across the application
+
+6. **Modular Pipeline Architecture**
    - Allows for customization of processing steps
    - Enables extension to new document types
    - Provides clear separation of concerns

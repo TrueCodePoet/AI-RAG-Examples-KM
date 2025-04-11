@@ -128,7 +128,8 @@ namespace AI_RAG_Examples_KM
             try
             {
                 // Create a TabularFilterHelper to access schema functionality
-                var filterHelper = new TabularFilterHelper(_memory);
+                // Pass the index name to enable more robust memory DB discovery
+                var filterHelper = new TabularFilterHelper(_memory, _indexName);
                 
                 // Get list of available datasets
                 var datasetList = await filterHelper.ListDatasetNamesAsync();
@@ -185,8 +186,8 @@ Dataset:";
                 Console.WriteLine($"--- Fetching Schema for: {datasetName} ---");
                 try
                 {
-                    // Re-use or create filter helper instance
-                    var schemaHelper = new TabularFilterHelper(_memory);
+                    // Re-use or create filter helper instance with index name
+                    var schemaHelper = new TabularFilterHelper(_memory, _indexName);
                     schema = await schemaHelper.GetSchemaAsync(datasetName);
                     if (schema != null)
                     {
@@ -285,7 +286,7 @@ Dataset:";
                         {
                             try
                             {
-                                var filterHelper = new TabularFilterHelper(_memory);
+                                var filterHelper = new TabularFilterHelper(_memory, _indexName);
                                 var result = await filterHelper.GenerateValidatedFilterAsync(
                                     datasetName, paramDict);
                                 
