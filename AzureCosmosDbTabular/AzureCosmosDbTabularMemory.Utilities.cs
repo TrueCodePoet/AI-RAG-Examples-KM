@@ -121,7 +121,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
     /// </summary>
     /// <param name="columnName">The column name to normalize.</param>
     /// <returns>The normalized column name.</returns>
-    private static string NormalizeColumnName(string columnName)
+    internal static string NormalizeColumnName(string columnName)
     {
         // Convert camelCase or PascalCase to snake_case
         string snakeCase = Regex.Replace(

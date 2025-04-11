@@ -454,10 +454,13 @@ internal class AzureCosmosDbTabularMemoryRecord
                                 // Skip keys that look like record prefixes
                                 if (!key.StartsWith("record from worksheet", StringComparison.OrdinalIgnoreCase))
                                 {
+                                    // Normalize the key to snake_case format
+                                    string normalizedKey = AzureCosmosDbTabularMemory.NormalizeColumnName(key);
+                                    
                                     // Convert value to appropriate type for regular data fields
                                     object value = ConvertToTypedValue(valueStr);
-                                    data[key] = value;
-                                    Console.WriteLine($"ParseSentenceFormat: Added {key}={valueStr} to data dictionary");
+                                    data[normalizedKey] = value;
+                                    Console.WriteLine($"ParseSentenceFormat: Added {normalizedKey}={valueStr} (original key: {key}) to data dictionary");
                                 }
                                 else
                                 {
@@ -516,9 +519,13 @@ internal class AzureCosmosDbTabularMemoryRecord
             // Handle regular data fields
             else
             {
+                // Normalize the key to snake_case format
+                string normalizedKey = AzureCosmosDbTabularMemory.NormalizeColumnName(key);
+                
                 // Convert value to appropriate type
                 object value = ConvertToTypedValue(valueStr);
-                data[key] = value;
+                data[normalizedKey] = value;
+                Console.WriteLine($"ParseKeyValueFormat: Added {normalizedKey}={valueStr} (original key: {key}) to data dictionary");
             }
         }
     }
