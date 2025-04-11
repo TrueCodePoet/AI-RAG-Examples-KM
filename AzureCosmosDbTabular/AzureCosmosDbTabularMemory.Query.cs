@@ -101,11 +101,11 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     // Using LIKE operator for pattern matching
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
-                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) LIKE {paramName}");
+                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) LIKE {paramName}");
                                     }
                                     else
                                     {
-                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] LIKE {paramName}");
+                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}");
                                     }
                                     this._logger.LogDebug("Using LIKE pattern matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
                                 }
@@ -114,11 +114,11 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     // Default is CONTAINS for substring matching
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
-                                        innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]), {paramName})");
+                                        innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}), {paramName})");
                                     }
                                     else
                                     {
-                                        innerBuilder.Append($"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"], {paramName})");
+                                        innerBuilder.Append($"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})");
                                     }
                                     this._logger.LogDebug("Using CONTAINS fuzzy matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
                                 }
@@ -128,11 +128,11 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                 // For non-fuzzy matching, use equality with case sensitivity setting
                                 if (this._config.FuzzyMatch.CaseInsensitive)
                                 {
-                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) = {paramName}");
+                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}");
                                 }
                                 else
                                 {
-                                    innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] = {paramName}");
+                                    innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}");
                                 }
                                 this._logger.LogDebug("Using exact matching for field {FieldName} with value {OriginalValue}", fieldName, originalValue);
                             }
@@ -158,7 +158,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                         innerBuilder.Append(" OR ");
                                     }
                                     
-                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]) = {paramName}");
+                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}");
                                     firstValue = false;
                                 }
                             }
@@ -179,7 +179,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                             // For non-string values
                             string paramName = $"@p_{parameters.Count}";
                             parameters.Add(Tuple.Create<string, object>(paramName, pair.Value));
-                            innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"] = {paramName}");
+                            innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}");
                         }
                         
                         firstInnerCondition = false;
@@ -419,7 +419,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
             else
             {
                 // For data fields, we can use traditional grouping
-                string fieldPath = $"c.{AzureCosmosDbTabularMemoryRecord.DataField}[\"{fieldName}\"]";
+                string fieldPath = $"c.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}";
                 
                 // Query for the top values of the specified field
                 var sql = $@"

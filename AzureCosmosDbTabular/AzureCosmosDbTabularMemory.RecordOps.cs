@@ -368,7 +368,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
         string text,
         ICollection<MemoryFilter>? filters = null,
         double minRelevance = 0,
-        int limit = 1,
+        int limit = 5, // Changed default to 5
         bool withEmbeddings = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -379,18 +379,29 @@ internal sealed partial class AzureCosmosDbTabularMemory
         var (whereCondition, filterParameters) = this.ProcessFilters("c", filters);
 
         // Construct the vector search query using the root path
-        string vectorFieldQueryPath = $"c.{AzureCosmosDbTabularMemoryRecord.VectorField}"; // Reverted path c.embedding
+        string vectorFieldQueryPath = $"c.{AzureCosmosDbTabularMemoryRecord.VectorField}";
+        
+        // Determine if we should use a limit
+        string topClause = limit > 0 ? $"TOP @limit" : "";
+        
         var sql = $"""
-                   SELECT TOP @limit
+                   SELECT {topClause}
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}, VectorDistance({vectorFieldQueryPath}, @queryEmbedding) AS SimilarityScore
                    FROM c
                    {whereCondition}
                    ORDER BY VectorDistance({vectorFieldQueryPath}, @queryEmbedding) ASC
                    """; // ASC order because lower distance means higher similarity
 
-        var queryDefinition = new QueryDefinition(sql)
-            .WithParameter("@limit", limit)
-            .WithParameter("@queryEmbedding", queryEmbedding.Data.ToArray()); // Pass embedding data array as parameter
+        var queryDefinition = new QueryDefinition(sql);
+        
+        // Only add the limit parameter if we're using a limit
+        if (limit > 0)
+        {
+            queryDefinition = queryDefinition.WithParameter("@limit", limit);
+        }
+        
+        // Add the query embedding parameter
+        queryDefinition = queryDefinition.WithParameter("@queryEmbedding", queryEmbedding.Data.ToArray());
 
         // Add filter parameters
         foreach (var (name, value) in filterParameters)
@@ -459,23 +470,31 @@ internal sealed partial class AzureCosmosDbTabularMemory
     public async IAsyncEnumerable<MemoryRecord> GetListAsync(
         string index,
         ICollection<MemoryFilter>? filters = null,
-        int limit = 1,
+        int limit = 5, // Changed default to 5
         bool withEmbeddings = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Process filters to extract both standard tag filters and structured data filters
         var (whereCondition, parameters) = this.ProcessFilters("c", filters);
 
+        // Determine if we should use a limit
+        string topClause = limit > 0 ? $"TOP @limit" : "";
+
         var sql = $"""
-                   SELECT Top @limit
+                   SELECT {topClause}
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
                    FROM
                      c
                    {whereCondition}
-                   """; // Using @limit instead of @topN
+                   """;
 
-        var queryDefinition = new QueryDefinition(sql)
-            .WithParameter("@limit", limit);
+        var queryDefinition = new QueryDefinition(sql);
+        
+        // Only add the limit parameter if we're using a limit
+        if (limit > 0)
+        {
+            queryDefinition = queryDefinition.WithParameter("@limit", limit);
+        }
 
         // Add all parameters from the filters
         foreach (var (name, value) in parameters)
