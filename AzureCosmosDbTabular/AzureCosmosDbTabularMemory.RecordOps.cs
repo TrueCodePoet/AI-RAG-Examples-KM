@@ -390,8 +390,8 @@ internal sealed partial class AzureCosmosDbTabularMemory
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}, VectorDistance({vectorFieldQueryPath}, @queryEmbedding) AS SimilarityScore
                    FROM c
                    {whereCondition}
-                   ORDER BY VectorDistance({vectorFieldQueryPath}, @queryEmbedding) ASC
-                   """; // ASC order because lower distance means higher similarity
+                   ORDER BY VectorDistance({vectorFieldQueryPath}, @queryEmbedding)
+                   """; // No ASC/DESC needed - VectorDistance automatically sorts from most similar to least similar
 
         var queryDefinition = new QueryDefinition(sql);
         
