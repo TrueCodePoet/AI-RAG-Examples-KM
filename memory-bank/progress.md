@@ -31,6 +31,8 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Response formatting with source attribution
 - ✅ Basic error handling for query failures
 - ✅ Schema-based parameter validation
+- ✅ Result limiting for large result sets
+- ✅ Reflection-based access to memory components
 
 ### Configuration and Setup
 - ✅ Configuration loading from appsettings.json
@@ -136,6 +138,23 @@ The project is in a functional prototype stage, with core components implemented
    - **Workaround**: None needed, issue has been fixed.
    - **Status**: Fixed with proper deserialization of the tabular_data field.
 
+### TabularFilterHelper Issues
+1. **Dynamic Type Errors in Asynchronous Contexts**: Using dynamic types with asynchronous iteration.
+   - **Impact**: Build errors with "Cannot use a collection of dynamic type in an asynchronous foreach".
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed by redesigning TabularFilterHelper to use .NET Reflection API instead of dynamic typing.
+
+2. **Robust Method Invocation**: Previous approach was fragile with method calls on dynamic objects.
+   - **Impact**: Potential runtime errors if method signatures or return types changed.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed by implementing explicit method lookup and invocation via reflection with strong error handling.
+
+### Result Presentation
+1. **Overwhelming Results for Large Datasets**: No control over the number of results shown to users.
+   - **Impact**: Users could be overwhelmed by large result sets, especially for queries matching many records.
+   - **Workaround**: None needed, issue has been fixed.
+   - **Status**: Fixed by adding a resultLimit parameter to AskTabularQuestionAsync and implementing post-query limiting.
+
 ### Rate Limiting
 1. **Azure OpenAI Rate Limits**: Processing large datasets can hit API rate limits.
    - **Impact**: Processing delays due to required wait times between retries.
@@ -174,6 +193,8 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-11 | Added support for unlimited query results | Completed |
 | 2025-04-11 | Enhanced error handling for vector search failures | Completed |
 | 2025-04-11 | Fixed memory DB access in TabularFilterHelper | Completed |
+| 2025-04-11 | Redesigned TabularFilterHelper to use Reflection API | Completed |
+| 2025-04-11 | Added result limiting capability to control displayed sources | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
 | 2025-04-20 | Documentation and examples | In Progress |

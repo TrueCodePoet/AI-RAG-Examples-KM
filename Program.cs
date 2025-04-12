@@ -109,7 +109,8 @@ async Task QueryKernelMemory()
     It is important to return the full list. I expect that there are over 40.";
 
     Console.WriteLine($"\n*** Searching Tabular Index for: {Question} ***");
-    await tabularQueryProcessor.AskTabularQuestionAsync(Question);
+    // Pass a result limit of 10 to limit the displayed results
+    await tabularQueryProcessor.AskTabularQuestionAsync(Question, resultLimit: 10);
     
     Console.WriteLine($"\n*** Searching Standard Index for: {Question} ***");
     await standardQueryProcessor.AskQuestionAsync(Question);

@@ -46,14 +46,27 @@ The project is currently focused on implementing and testing the tabular data pr
 - Added support for translating natural language to structured filters with JSON output format
 - Implemented schema-based filter validation against the identified dataset's schema
 - Implemented specialized response formatting for tabular data queries
+- **Added result limiting feature to control the number of sources displayed in responses**
+  - Added resultLimit parameter to AskTabularQuestionAsync method
+  - Implemented logic to limit displayed sources while still using all sources for the answer
+  - Modified Program.cs to use a result limit of 10 for tabular queries
+
+### TabularFilterHelper Improvements
+- **Completely redesigned TabularFilterHelper to use Reflection API** instead of dynamic typing
+  - Fixed "Cannot use a collection of dynamic type in an asynchronous foreach" errors
+  - Improved robustness by using proper method invocation through reflection
+  - Added extensive error handling for method lookup and invocation failures
+  - Maintained the same API surface for backward compatibility
+  - Enhanced the constructor to better handle dependency injection
 
 ## Next Steps
 
 ### Short-term Tasks
 1. **Testing with Larger Datasets**: Test the system with larger Excel files to evaluate performance and accuracy
 2. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries
-3. **Error Handling**: Improve error handling for edge cases in Excel processing
+3. **Error Handling**: Continue improving error handling for edge cases in Excel processing
 4. **Documentation**: Add more detailed documentation on the tabular data processing capabilities
+5. **Result Presentation**: Further enhance the result limiting feature with pagination or summarization options
 
 ### Medium-term Goals
 1. **Support for Additional File Formats**: Extend the tabular processing to other structured formats (CSV, JSON, etc.)
@@ -77,13 +90,16 @@ The project is currently focused on implementing and testing the tabular data pr
 5. **Text Field Parsing**: Implemented a robust approach to extract all data (metadata and row data) from the text field using a combination of regex for the prefix and manual string splitting/parsing for the data section.
 6. **Partial Class Organization**: Used C# partial classes to organize the large AzureCosmosDbTabularMemory implementation into logical groupings while maintaining a single cohesive class.
 7. **Filename Priority for Schema Generation**: Modified the `ExtractSchemaFromWorkbook` method to prioritize the provided file path over workbook metadata (Title property) when determining the source file name.
+8. **Reflection-Based Access to TabularMemory Methods**: Used .NET Reflection API in TabularFilterHelper to invoke methods safely without requiring cast to concrete types, improving robustness and maintainability.
+9. **Result Limiting Approach**: Implemented result limiting post-query to allow the LLM to still have access to all information while controlling what's displayed to the user.
 
 ### Open Questions
 1. **Scaling Strategy**: How to efficiently scale the system for very large datasets?
 2. **Cost Optimization**: What strategies can be employed to minimize Azure costs while maintaining performance?
 3. **Query Precision**: How to balance between natural language flexibility and query precision?
 4. **Data Type Preservation**: What's the best approach for handling complex data types in Excel files?
-5. **Helper Dependencies**: The `TabularFilterHelper` uses reflection to access internal Kernel Memory fields, which could break with future KM updates. Is there a more robust way to achieve this?
+5. **Helper Dependencies**: With the new reflection-based approach, TabularFilterHelper is more robust, but is this the best long-term solution or should we push for API changes in Kernel Memory?
+6. **Result Presentation**: What's the most effective way to present large result sets to users? Pagination, summarization, clustering?
 
 ### Current Challenges
 1. **Filter Accuracy**: The filter generation sometimes misinterprets field names or values in complex queries.
@@ -104,60 +120,16 @@ The project is currently focused on implementing and testing the tabular data pr
    - Only include TOP @limit in SQL when limit > 0
    - Only add @limit parameter when actually using a limit
    - Changed default limit from 1 to 5 in all query methods for better usability
-
-9. **Memory DB Access in TabularFilterHelper**: Previously, the access to the AzureCosmosDbTabularMemory instance was failing with reflection.
-   - Problem: `TabularFilterHelper.GetTabularMemoryDb()` relied on reflection to obtain the tabular memory database instance
-   - Error: "Could not find _memoryDb field in memory object" when trying to identify datasets for filters
-   - Solution: Enhanced `TabularFilterHelper` with multiple fallback approaches:
-     - Try main `MemoryHelper.GetMemoryDbFromKernelMemory()` method first
-     - Try direct reflection next
-     - Scan all fields and properties recursively
-     - Also check orchestrator for the memory db instance
-     - Made `TabularFilterHelper` accept an index name in constructor for improved context
-     - Updated `KernelMemoryQueryProcessor` to pass the index name to all `TabularFilterHelper` instances
-6. **Excel PivotTable Handling**: Excel files with PivotTables can cause processing errors, now addressed with improved error detection and handling.
-7. **Type Compatibility**: Fixed issues with TabularExcelDecoder where internal/public type accessibility conflicts prevented proper schema extraction.
-8. **Schema Storage**: Fixed issue where TabularExcelDecoder's `_memory` field was null, preventing schema from being saved. Implemented a two-part solution:
-   - Enhanced dependency injection to properly resolve the IMemoryDb instance
-   - Added a WithMemory method to TabularExcelDecoder to allow setting the memory instance after creation
-   - Used reflection to find and update TabularExcelDecoder instances in the pipeline at runtime
-
-9. **Interface-based Design**: Improved code by using the IMemoryDb interface instead of the concrete AzureCosmosDbTabularMemory class:
-   - Modified TabularExcelDecoder to accept IMemoryDb instead of AzureCosmosDbTabularMemory
-   - Updated Program.cs to work with IMemoryDb for better abstraction
-   - This change improves maintainability and allows for easier swapping of memory implementations
-
-10. **Source Dictionary Extraction**: Fixed issue where source dictionary was empty by implementing a more robust approach:
-    - Added code to extract metadata (worksheet, row, schema ID, import batch ID) from the text field first
-    - Implemented fallbacks to check payload fields if not found in text
-    - Used consistent variable naming to avoid compilation errors
-    - This ensures all metadata is properly included in the Cosmos DB documents
-
-11. **Data Dictionary Population**: Fixed issue where the data dictionary was empty by implementing proper deserialization:
-    - Added code to directly deserialize the tabular_data field from the payload
-    - Prioritized this approach over text parsing for more accurate data representation
-    - Added fallback to text parsing if tabular_data deserialization fails
-    - This ensures the memory row holds the actual data with correct fields and values
-
-12. **Runtime Reflection for Dependency Injection**: Implemented a reflection-based approach in Program.cs to inject dependencies:
-    - Created MemoryHelper class with reflection methods to access internal Kernel Memory components
-    - Added GetMemoryDbFromKernelMemory method to extract the IMemoryDb instance from IKernelMemory
-    - Added SetMemoryOnTabularExcelDecoders method to inject the IMemoryDb into TabularExcelDecoder instances
-    - This approach is a workaround for pipeline initialization limitations but introduces reliance on internal implementation details
-
-13. **Text Concatenation in Payload**: Addressed issue where the `text` field in stored records contained concatenated text from multiple rows:
-    - Improved `ParseSentenceFormat` method to detect multiple record patterns in text
-    - Added logic to truncate text at the second record pattern if concatenation is detected
-    - Added additional logging to track data flowing through the system
-    - This ensures only relevant data from the first record gets extracted into the data dictionary
-
-14. **Dual Pipeline Implementation**: Added support for maintaining both standard and tabular pipelines:
-    - Created separate memory instances for tabular and standard processing approaches
-    - Modified `KernelSetup.cs` to conditionally configure `AzureCosmosDbTabularMemory` with different settings
-    - Added or omitted the `TextPartitioningHandler` based on the pipeline type
-    - Updated `Program.cs` to process documents through both pipelines
-    - Used different index names to maintain separate collections of data
-    - This allows processing the same documents with different approaches based on document type
+9. **TabularFilterHelper Dynamic Type Issues**: Fixed issues with using dynamic types in asynchronous contexts.
+   - Problem: "Cannot use a collection of dynamic type in an asynchronous foreach" errors
+   - Solution: Redesigned TabularFilterHelper to use .NET Reflection API for method invocation
+   - Added extensive error handling for method lookup and invocation
+   - This approach avoids type casting while maintaining compatibility with the API
+10. **Result Set Size Control**: Added the ability to limit displayed results.
+    - Problem: Large result sets could be overwhelming to users
+    - Solution: Added resultLimit parameter to AskTabularQuestionAsync
+    - Implemented post-query filtering of displayed sources
+    - Updated Program.cs to use a default limit of 10 for tabular queries
 
 ## Rate Limiting Considerations
 
@@ -191,6 +163,6 @@ Potential solutions include:
 | Azure Blob Storage | Implemented | Basic functionality for document ingestion |
 | Excel Processing | Implemented | Custom decoder for tabular data preservation with PivotTable handling |
 | Filter Generation | Implemented | AI-driven approach with room for improvement |
-| Query Processing | Implemented | Basic functionality with specialized formatting |
+| Query Processing | Implemented | Basic functionality with specialized formatting and result limiting |
 | Schema Management | Implemented | Schema extraction, storage, and validation in the same container as data |
 | UI/API | Not Started | Planned for future development |

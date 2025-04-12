@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,16 +20,11 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// </summary>
 public class TabularFilterHelper
 {
-    // For caching the memory instance between calls
-    private IMemoryDb? _memoryDb;
-    
     // Core properties
     private readonly ILogger<TabularFilterHelper> _logger;
+    private readonly IMemoryDb _memoryDb;
     private readonly string _indexName;
     private readonly IKernelMemory? _memory;
-
-    // Property to lazy-load and cache the tabular memory DB
-    private AzureCosmosDbTabularMemory TabularMemoryDb => (AzureCosmosDbTabularMemory)GetTabularMemoryDb();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabularFilterHelper"/> class.
@@ -67,7 +63,27 @@ public class TabularFilterHelper
         this._indexName = indexName;
         this._logger = logger ?? Microsoft.KernelMemory.Diagnostics.DefaultLogger.Factory.CreateLogger<TabularFilterHelper>();
         
-        // The _memoryDb field will be populated on first use
+        // Attempt to initialize MemoryDb from IKernelMemory
+        try
+        {
+            var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(memory);
+            if (memoryDb != null && IsTabularMemoryDb(memoryDb))
+            {
+                this._memoryDb = memoryDb;
+            }
+            else
+            {
+                throw new ArgumentException(
+                    "Could not find a suitable AzureCosmosDbTabularMemory instance in the provided IKernelMemory.", 
+                    nameof(memory));
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new ArgumentException(
+                $"Failed to extract AzureCosmosDbTabularMemory from IKernelMemory: {ex.Message}", 
+                nameof(memory), ex);
+        }
     }
 
     /// <summary>
@@ -88,11 +104,21 @@ public class TabularFilterHelper
         string indexName,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the GetFilterableFieldsAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("GetFilterableFieldsAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'GetFilterableFieldsAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Get the filterable fields
-        return await memoryDb.GetFilterableFieldsAsync(indexName, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { indexName, cancellationToken }) as Task<Dictionary<string, HashSet<string>>>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetFilterableFieldsAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -111,11 +137,21 @@ public class TabularFilterHelper
         int limit = 10,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the GetTopFieldValuesAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("GetTopFieldValuesAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'GetTopFieldValuesAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Get the top field values
-        return await memoryDb.GetTopFieldValuesAsync(indexName, fieldType, fieldName, limit, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { indexName, fieldType, fieldName, limit, cancellationToken }) as Task<List<(string, int)>>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetTopFieldValuesAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -128,11 +164,21 @@ public class TabularFilterHelper
         string datasetName,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the GetSchemaAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("GetSchemaAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'GetSchemaAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Get the schema
-        return await memoryDb.GetSchemaAsync(datasetName, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { datasetName, cancellationToken }) as Task<TabularDataSchema?>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetSchemaAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -143,11 +189,21 @@ public class TabularFilterHelper
     public async Task<List<TabularDataSchema>> ListSchemasAsync(
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the ListSchemasAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("ListSchemasAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'ListSchemasAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // List schemas
-        return await memoryDb.ListSchemasAsync(cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { cancellationToken }) as Task<List<TabularDataSchema>>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke ListSchemasAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -158,11 +214,21 @@ public class TabularFilterHelper
     public async Task<List<string>> ListDatasetNamesAsync(
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the ListDatasetNamesAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("ListDatasetNamesAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'ListDatasetNamesAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // List dataset names
-        return await memoryDb.ListDatasetNamesAsync(cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { cancellationToken }) as Task<List<string>>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke ListDatasetNamesAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -175,11 +241,21 @@ public class TabularFilterHelper
         string sourceFileName,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the GetSchemasBySourceFileAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("GetSchemasBySourceFileAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'GetSchemasBySourceFileAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Get schemas by source file
-        return await memoryDb.GetSchemasBySourceFileAsync(sourceFileName, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { sourceFileName, cancellationToken }) as Task<List<TabularDataSchema>>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetSchemasBySourceFileAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -192,11 +268,21 @@ public class TabularFilterHelper
         string schemaId,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the GetSchemaByIdAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("GetSchemaByIdAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'GetSchemaByIdAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Get schema by ID
-        return await memoryDb.GetSchemaByIdAsync(schemaId, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { schemaId, cancellationToken }) as Task<TabularDataSchema?>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetSchemaByIdAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -215,16 +301,70 @@ public class TabularFilterHelper
         bool withEmbeddings = false,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
-
-        // Get records by schema ID
-        var result = new List<MemoryRecord>();
-        await foreach (var record in memoryDb.GetRecordsBySchemaIdAsync(
-            indexName, schemaId, limit, withEmbeddings, cancellationToken))
+        // This method returns IAsyncEnumerable, so we need special handling
+        var method = _memoryDb.GetType().GetMethod("GetRecordsBySchemaIdAsync");
+        if (method == null)
         {
-            result.Add(record);
+            throw new InvalidOperationException($"Method 'GetRecordsBySchemaIdAsync' not found in type {_memoryDb.GetType().FullName}");
         }
+
+        // Invoke the method to get the IAsyncEnumerable
+        // We'll manually enumerate it and convert to a List
+        var result = new List<MemoryRecord>();
+        var asyncEnumerable = method.Invoke(_memoryDb, new object[] { indexName, schemaId, limit, withEmbeddings, cancellationToken });
+        
+        if (asyncEnumerable == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetRecordsBySchemaIdAsync method");
+        }
+
+        // Get the GetAsyncEnumerator method from IAsyncEnumerable<MemoryRecord>
+        var enumeratorMethod = asyncEnumerable.GetType().GetMethod("GetAsyncEnumerator");
+        if (enumeratorMethod == null)
+        {
+            throw new InvalidOperationException("Could not get GetAsyncEnumerator method");
+        }
+        
+        // Get the enumerator
+        var enumerator = enumeratorMethod.Invoke(asyncEnumerable, new object[] { cancellationToken });
+        if (enumerator == null)
+        {
+            throw new InvalidOperationException("Failed to get async enumerator");
+        }
+        
+        // Get the MoveNextAsync and Current methods
+        var moveNextMethod = enumerator.GetType().GetMethod("MoveNextAsync");
+        var currentProperty = enumerator.GetType().GetProperty("Current");
+        
+        if (moveNextMethod == null || currentProperty == null)
+        {
+            throw new InvalidOperationException("Could not get MoveNextAsync method or Current property");
+        }
+        
+        // Enumerate the results manually
+        while (true)
+        {
+            // Call MoveNextAsync and await the result
+            var moveNextTask = moveNextMethod.Invoke(enumerator, Array.Empty<object>()) as Task<bool>;
+            if (moveNextTask == null)
+            {
+                throw new InvalidOperationException("Failed to invoke MoveNextAsync");
+            }
+            
+            bool hasNext = await moveNextTask.ConfigureAwait(false);
+            if (!hasNext)
+            {
+                break;
+            }
+            
+            // Get the current item
+            var current = currentProperty.GetValue(enumerator) as MemoryRecord;
+            if (current != null)
+            {
+                result.Add(current);
+            }
+        }
+        
         return result;
     }
 
@@ -244,16 +384,70 @@ public class TabularFilterHelper
         bool withEmbeddings = false,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
-
-        // Get records by import batch ID
-        var result = new List<MemoryRecord>();
-        await foreach (var record in memoryDb.GetRecordsByImportBatchIdAsync(
-            indexName, importBatchId, limit, withEmbeddings, cancellationToken))
+        // This method returns IAsyncEnumerable, so we need special handling
+        var method = _memoryDb.GetType().GetMethod("GetRecordsByImportBatchIdAsync");
+        if (method == null)
         {
-            result.Add(record);
+            throw new InvalidOperationException($"Method 'GetRecordsByImportBatchIdAsync' not found in type {_memoryDb.GetType().FullName}");
         }
+
+        // Invoke the method to get the IAsyncEnumerable
+        // We'll manually enumerate it and convert to a List
+        var result = new List<MemoryRecord>();
+        var asyncEnumerable = method.Invoke(_memoryDb, new object[] { indexName, importBatchId, limit, withEmbeddings, cancellationToken });
+        
+        if (asyncEnumerable == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetRecordsByImportBatchIdAsync method");
+        }
+
+        // Get the GetAsyncEnumerator method from IAsyncEnumerable<MemoryRecord>
+        var enumeratorMethod = asyncEnumerable.GetType().GetMethod("GetAsyncEnumerator");
+        if (enumeratorMethod == null)
+        {
+            throw new InvalidOperationException("Could not get GetAsyncEnumerator method");
+        }
+        
+        // Get the enumerator
+        var enumerator = enumeratorMethod.Invoke(asyncEnumerable, new object[] { cancellationToken });
+        if (enumerator == null)
+        {
+            throw new InvalidOperationException("Failed to get async enumerator");
+        }
+        
+        // Get the MoveNextAsync and Current methods
+        var moveNextMethod = enumerator.GetType().GetMethod("MoveNextAsync");
+        var currentProperty = enumerator.GetType().GetProperty("Current");
+        
+        if (moveNextMethod == null || currentProperty == null)
+        {
+            throw new InvalidOperationException("Could not get MoveNextAsync method or Current property");
+        }
+        
+        // Enumerate the results manually
+        while (true)
+        {
+            // Call MoveNextAsync and await the result
+            var moveNextTask = moveNextMethod.Invoke(enumerator, Array.Empty<object>()) as Task<bool>;
+            if (moveNextTask == null)
+            {
+                throw new InvalidOperationException("Failed to invoke MoveNextAsync");
+            }
+            
+            bool hasNext = await moveNextTask.ConfigureAwait(false);
+            if (!hasNext)
+            {
+                break;
+            }
+            
+            // Get the current item
+            var current = currentProperty.GetValue(enumerator) as MemoryRecord;
+            if (current != null)
+            {
+                result.Add(current);
+            }
+        }
+        
         return result;
     }
 
@@ -269,11 +463,21 @@ public class TabularFilterHelper
         string recordId,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the GetSchemaForRecordAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("GetSchemaForRecordAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'GetSchemaForRecordAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Get schema for record
-        return await memoryDb.GetSchemaForRecordAsync(indexName, recordId, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { indexName, recordId, cancellationToken }) as Task<TabularDataSchema?>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke GetSchemaForRecordAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -288,11 +492,21 @@ public class TabularFilterHelper
         Dictionary<string, object> parameters,
         CancellationToken cancellationToken = default)
     {
-        // Get the memory DB instance and cast to tabular memory DB
-        var memoryDb = TabularMemoryDb;
+        // Get the ValidateParametersAsync method from the concrete type
+        var method = _memoryDb.GetType().GetMethod("ValidateParametersAsync");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"Method 'ValidateParametersAsync' not found in type {_memoryDb.GetType().FullName}");
+        }
 
-        // Validate parameters
-        return await memoryDb.ValidateParametersAsync(datasetName, parameters, cancellationToken).ConfigureAwait(false);
+        // Invoke the method
+        var task = method.Invoke(_memoryDb, new object[] { datasetName, parameters, cancellationToken }) as Task<(Dictionary<string, object>, List<string>)>;
+        if (task == null)
+        {
+            throw new InvalidOperationException("Failed to invoke ValidateParametersAsync method");
+        }
+
+        return await task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -366,173 +580,5 @@ public class TabularFilterHelper
         }
 
         return filter;
-    }
-
-    /// <summary>
-    /// Gets the tabular memory DB instance.
-    /// </summary>
-    /// <returns>The tabular memory DB instance.</returns>
-    private IMemoryDb GetTabularMemoryDb()
-    {
-        // If we already have a direct IMemoryDb reference from the constructor, use it
-        if (_memoryDb != null)
-        {
-            return _memoryDb;
-        }
-        
-        // If we're using the IKernelMemory constructor, we need to find the IMemoryDb
-        if (_memory == null)
-        {
-            throw new InvalidOperationException(
-                "No memory instance provided. Both _memoryDb and _memory are null.");
-        }
-        
-        try
-        {
-            // Start by trying to get the memory DB instance using the helper method from Program.cs
-            var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(this._memory);
-            if (memoryDb != null)
-            {
-                if (IsTabularMemoryDb(memoryDb))
-                {
-                    this._logger.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance via helper");
-                    // Cache for future use
-                    this._memoryDb = memoryDb;
-                    return memoryDb;
-                }
-                else
-                {
-                    this._logger.LogWarning("MemoryDb is not an AzureCosmosDbTabularMemory instance, it's: {Type}", 
-                        memoryDb.GetType().FullName);
-                }
-            }
-            else
-            {
-                this._logger.LogWarning("MemoryHelper.GetMemoryDbFromKernelMemory returned null");
-            }
-            
-            // Try reflection approaches
-            var foundMemoryDb = FindTabularMemoryDbViaReflection();
-            if (foundMemoryDb != null)
-            {
-                // Cache for future use
-                this._memoryDb = foundMemoryDb;
-                return foundMemoryDb;
-            }
-            
-            // We didn't find a valid TabularMemoryDb
-            throw new InvalidOperationException(
-                $"Could not find AzureCosmosDbTabularMemory instance in IKernelMemory. " +
-                $"Index name was: {this._indexName ?? "(not provided)"}");
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogError(ex, "Error locating tabular memory DB instance");
-            throw new InvalidOperationException("Failed to locate tabular memory DB instance.", ex);
-        }
-    }
-    
-    /// <summary>
-    /// Tries to find the tabular memory DB instance via reflection.
-    /// </summary>
-    private IMemoryDb? FindTabularMemoryDbViaReflection()
-    {
-        if (_memory == null)
-        {
-            return null;
-        }
-        
-        // 1. Try the standard field name first
-        try
-        {
-            var memoryDbField = this._memory.GetType().GetField("_memoryDb", 
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                
-            if (memoryDbField != null)
-            {
-                var reflectedMemoryDb = memoryDbField.GetValue(this._memory);
-                if (reflectedMemoryDb is IMemoryDb memoryDb && IsTabularMemoryDb(memoryDb))
-                {
-                    this._logger.LogInformation("Found TabularMemoryDb via _memoryDb field reflection");
-                    return memoryDb;
-                }
-                else if (reflectedMemoryDb != null)
-                {
-                    this._logger.LogWarning("_memoryDb field contains a different type: {ActualType}", 
-                        reflectedMemoryDb.GetType().FullName);
-                }
-            }
-            else
-            {
-                this._logger.LogWarning("Could not find _memoryDb field in memory object");
-            }
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogWarning("Error accessing _memoryDb field: {Error}", ex.Message);
-        }
-        
-        // 2. Try looking through all private fields
-        try
-        {
-            foreach (var field in this._memory.GetType().GetFields(
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-            {
-                try
-                {
-                    var value = field.GetValue(this._memory);
-                    if (value is IMemoryDb memoryDb && IsTabularMemoryDb(memoryDb))
-                    {
-                        this._logger.LogInformation("Found TabularMemoryDb in field {FieldName}", field.Name);
-                        return memoryDb;
-                    }
-                }
-                catch (Exception) { /* Ignore individual field access errors */ }
-            }
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogWarning("Error scanning fields: {Error}", ex.Message);
-        }
-
-        // 3. Try the orchestrator
-        try
-        {
-            var orchestratorProp = this._memory.GetType().GetProperty("Orchestrator");
-            if (orchestratorProp != null)
-            {
-                var orchestrator = orchestratorProp.GetValue(this._memory);
-                if (orchestrator != null)
-                {
-                    var orchestratorType = orchestrator.GetType();
-                    
-                    // Try to find _memoryDb in orchestrator
-                    var orchestratorMemoryDbField = orchestratorType.GetField("_memoryDb", 
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        
-                    if (orchestratorMemoryDbField != null)
-                    {
-                        var orchestratorMemoryDb = orchestratorMemoryDbField.GetValue(orchestrator);
-                        if (orchestratorMemoryDb is IMemoryDb memoryDb && IsTabularMemoryDb(memoryDb))
-                        {
-                            this._logger.LogInformation("Found TabularMemoryDb in orchestrator._memoryDb");
-                            return memoryDb;
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogWarning("Error accessing orchestrator: {Error}", ex.Message);
-        }
-        
-        // Nothing found
-        this._logger.LogError(
-            "Could not find TabularMemoryDb instance in IKernelMemory. " +
-            "Make sure TabularFilterHelper is being created with the same IKernelMemory " +
-            "instance used throughout the application.");
-            
-        return null;
     }
 }

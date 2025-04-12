@@ -121,7 +121,7 @@ namespace AI_RAG_Examples_KM
             }
         }
 
-        public async Task AskTabularQuestionAsync(string question)
+        public async Task AskTabularQuestionAsync(string question, int? resultLimit = null)
         {
             // --- Dataset Identification Step ---
             Console.WriteLine("--- Identifying Dataset ---");
@@ -374,16 +374,19 @@ Dataset:";
             Console.WriteLine("\n--- Asking Kernel Memory ---");
             string sources = "";
             // Pass the generated filter (if any) to AskAsync
-            // Note: AskAsync might not have a 'limit' param exposed directly for getting *all* results.
-            //  For comprehensive retrieval based *only* on filters, SearchAsync might be better,
-            //  followed by a separate LLM call to synthesize the answer from the search results.
-           
-            //var answer = await memory.AskAsync(question, index: IndexName, filter: generatedFilter);
             var answer = await _memory.AskAsync(question, index: _indexName, filter: generatedFilter);
-         
-            foreach (var x in answer.RelevantSources)
+            
+            // Apply result limit if specified
+            var relevantSources = answer.RelevantSources;
+            if (resultLimit.HasValue && resultLimit.Value > 0 && relevantSources.Count > resultLimit.Value)
             {
-                // Attempt to get the original file name if availablestring
+                Console.WriteLine($"Limiting results to {resultLimit.Value} (from {relevantSources.Count} total)");
+                relevantSources = relevantSources.Take(resultLimit.Value).ToList();
+            }
+         
+            foreach (var x in relevantSources)
+            {
+                // Attempt to get the original file name if available
                 string sourceName = x.SourceName;
                 List<string?> fileTagValue = null;
                 x.Partitions.FirstOrDefault()?.Tags.TryGetValue("file", out fileTagValue);
@@ -414,8 +417,6 @@ Dataset:";
         {sources}
         ---
          
-        ";
-        /*
         Only Respond with information from Kernel Memory including RelevantSources.
          
         If you don't know, then respond with 'This information is not part of our internal documents.'
@@ -423,8 +424,7 @@ Dataset:";
         If you do know then Start with 'According to our internal documents'. Reply with the best answer.
          
         Make sure to include the document name and reference id if available from the sources provided.
-        */
-            // Re-use the kernel instance, ensure the MemoryPlugin is imported if needed for tool calls in the final prompt// var plugin = new MemoryPlugin(memory, defaultIndex: IndexName, waitForIngestionToComplete: true);// kernel.ImportPluginFromObject(plugin, "SEOmemory"); // Only if SK_Prompt uses tools from MemoryPlugin
+        ";
          
             Microsoft.SemanticKernel.Connectors.AzureOpenAI.AzureOpenAIPromptExecutionSettings settings = new()
             {
