@@ -373,15 +373,39 @@ Dataset:";
             // --- Kernel Memory Ask Step ---    
             Console.WriteLine("\n--- Asking Kernel Memory ---");
             string sources = "";
-            // Pass the generated filter (if any) to AskAsync
-            var answer = await _memory.AskAsync(question, index: _indexName, filter: generatedFilter);
+
+            // Set a high limit (or no limit) for retrieving results from the database
+            int dbQueryLimit = resultLimit.HasValue && resultLimit.Value > 0 ? Math.Max(resultLimit.Value, 100) : 100;
+            Console.WriteLine($"Database query limit configured to: {dbQueryLimit}"); 
             
-            // Apply result limit if specified
+            // Use SearchAsync instead of AskAsync to get more control over the results
+            // We'll still use AskAsync for the synthesis but get the raw data first
+            var searchResults = await _memory.SearchAsync(
+                question, 
+                index: _indexName, 
+                filter: generatedFilter, 
+                limit: dbQueryLimit // SearchAsync does support the limit parameter
+            );
+            
+            Console.WriteLine($"Search returned {searchResults.Results.Count} results");
+            
+            // Now use AskAsync with the filter but without a limit parameter as it's not supported
+            var answer = await _memory.AskAsync(
+                question, 
+                index: _indexName, 
+                filter: generatedFilter
+            );
+            
+            // Apply result limit if specified (client-side filtering)
             var relevantSources = answer.RelevantSources;
             if (resultLimit.HasValue && resultLimit.Value > 0 && relevantSources.Count > resultLimit.Value)
             {
-                Console.WriteLine($"Limiting results to {resultLimit.Value} (from {relevantSources.Count} total)");
+                Console.WriteLine($"Limiting displayed results to {resultLimit.Value} (from {relevantSources.Count} total)");
                 relevantSources = relevantSources.Take(resultLimit.Value).ToList();
+            }
+            else
+            {
+                Console.WriteLine($"Total results retrieved: {relevantSources.Count}");
             }
          
             foreach (var x in relevantSources)
