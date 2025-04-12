@@ -140,37 +140,80 @@ namespace AI_RAG_Examples_KM
          
             // Get all files in the directory and subdirectories
             string[] files = Directory.GetFiles(_localDownloadPath, fileExtensionPattern, SearchOption.AllDirectories);
-            Console.WriteLine($"Found {files.Length} files to process");
-         
+            Console.WriteLine($"========== STARTING LOCAL FILE IMPORT SUMMARY ==========");
+            Console.WriteLine($"Found {files.Length} '{fileExtensionPattern}' files to process");
+            
+            // Counters for detailed tracking
+            int filesAttempted = 0;
+            int filesSucceeded = 0;
+            int filesFailed = 0;
+            Dictionary<string, List<string>> filesByExtension = new();
+            
             foreach (string localFilePath in files)
             {
                 string relativePath = Path.GetRelativePath(_localDownloadPath, localFilePath);
-                Console.WriteLine($"Processing local file: {relativePath}");
+                string extension = Path.GetExtension(localFilePath).ToLowerInvariant();
+                
+                // Track files by extension
+                if (!filesByExtension.ContainsKey(extension))
+                {
+                    filesByExtension[extension] = new List<string>();
+                }
+                filesByExtension[extension].Add(relativePath);
+                
+                filesAttempted++;
+                Console.WriteLine($"[{filesAttempted}/{files.Length}] Processing: {relativePath}");
          
                 try
                 {
-                    // Determine if the file is text or binary based on file extension
-                    string extension = Path.GetExtension(localFilePath).ToLowerInvariant();
+                    // We already have the extension variable from above
                     //bool isText = IsTextFile(extension);
          
                     Console.WriteLine($"Uploading memory file: {localFilePath}");
+                    
+                    // Create a stopwatch to track import time
+                    var stopwatch = new System.Diagnostics.Stopwatch();
+                    stopwatch.Start();
+                    
                     var docId = await _memory.ImportDocumentAsync(localFilePath,
                         index: _indexName,
-         
                         tags: new TagCollection() { { "FilePath", localFilePath } }
                         //,steps: ["extract_text", "split_text_in_partitions", "generate_embeddings", "save_current_records",
                         //        "summarize_data", "split_text_in_partitions", "generate_embeddings", "save_current_records"]
                         );
-         
-                    Console.WriteLine($"Memory added - Document Id: {docId} : {localFilePath}");
+                    
+                    stopwatch.Stop();
+                    filesSucceeded++;
+                    Console.WriteLine($"SUCCESS: Memory added - Document Id: {docId} : {localFilePath} (Took {stopwatch.ElapsedMilliseconds}ms)");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to process file '{localFilePath}': {ex.Message}");
+                    filesFailed++;
+                    Console.WriteLine($"FAILED: Could not process '{localFilePath}': {ex.Message}");
                     continue; // Skip to the next file
                 }
             }
-         
+            
+            // Print summary
+            Console.WriteLine($"========== LOCAL FILE IMPORT SUMMARY ==========");
+            Console.WriteLine($"Files found: {files.Length}");
+            Console.WriteLine($"Files attempted: {filesAttempted}");
+            Console.WriteLine($"Files succeeded: {filesSucceeded}");
+            Console.WriteLine($"Files failed: {filesFailed}");
+            
+            // Print breakdown by extension
+            Console.WriteLine($"Breakdown by extension:");
+            foreach (var kvp in filesByExtension)
+            {
+                Console.WriteLine($"  {kvp.Key}: {kvp.Value.Count} files");
+                // Optionally list the files with this extension
+                // if (kvp.Value.Count < 10) { // Only list if not too many
+                //     foreach (var file in kvp.Value) {
+                //         Console.WriteLine($"    - {file}");
+                //     }
+                // }
+            }
+            
             Console.WriteLine("All local files have been processed.");
         }
 

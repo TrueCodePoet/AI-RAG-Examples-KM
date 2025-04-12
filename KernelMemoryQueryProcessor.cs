@@ -389,12 +389,26 @@ Dataset:";
             
             Console.WriteLine($"Search returned {searchResults.Results.Count} results");
             
-            // Now use AskAsync with the filter but without a limit parameter as it's not supported
+            Console.WriteLine("--- First query was for raw search data. Now executing AskAsync for answer synthesis. ---");
+            
+            // Investigation: The two queries with different limits come from:
+            // 1. Our explicit SearchAsync above (limit: dbQueryLimit = 1000)
+            // 2. The internal SearchAsync called by AskAsync below (which defaults to 5)
+            
+            // The mystery is now solved! We can't avoid this because:
+            // 1. SearchAsync is called by us with limit=1000
+            // 2. AskAsync internally calls SearchAsync again with its default limit=5
+            
+            // Use the standard AskAsync method with just the filter
             var answer = await _memory.AskAsync(
                 question, 
                 index: _indexName, 
                 filter: generatedFilter
             );
+            
+            // Note: Even though AskAsync's internal search uses limit=5,
+            // the searchResults variable above contains all 1000 results,
+            // so we still have access to all the data for debugging
             
             // Apply result limit if specified (client-side filtering)
             var relevantSources = answer.RelevantSources;

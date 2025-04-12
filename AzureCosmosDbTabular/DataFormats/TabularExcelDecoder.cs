@@ -158,9 +158,17 @@ public sealed class TabularExcelDecoder : IContentDecoder
     private async Task<FileContent> DecodeStreamInternalAsync(Stream data, string? originalFilename = null, CancellationToken cancellationToken = default)
     {
         this._log.LogDebug("Internal: Extracting tabular data from MS Excel file stream. Original filename: {OriginalFilename}", originalFilename ?? "Unknown");
+        Console.WriteLine($"========== STARTING PROCESSING: {originalFilename ?? "Unknown"} ==========");
 
         var result = new FileContent(MimeTypes.PlainText);
         XLWorkbook? workbook = null;
+        
+        // Counters for tracking records processed
+        int totalWorksheets = 0;
+        int totalProcessedWorksheets = 0;
+        int totalRows = 0;
+        int processedRows = 0;
+        int totalChunks = 0;
 
         try
         {
@@ -266,9 +274,17 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     }
 
             var chunkNumber = 0;
+            
+            // Count total worksheets for reporting
+            totalWorksheets = workbook.Worksheets.Count;
+            Console.WriteLine($"Found {totalWorksheets} total worksheets in the workbook");
+            
             foreach (var worksheet in workbook.Worksheets)
             {
-
+                // Count rows in worksheet before filtering
+                var allRows = worksheet.RowsUsed().Count();
+                totalRows += allRows;
+                
                 // Skip worksheet if not in the list of worksheets to process
                 if (!this._config.ProcessAllWorksheets &&
                     !this._config.WorksheetsToProcess.Contains(worksheet.Name, StringComparer.OrdinalIgnoreCase))
@@ -278,6 +294,8 @@ public sealed class TabularExcelDecoder : IContentDecoder
 
                 var worksheetName = worksheet.Name;
                 this._log.LogDebug("Processing worksheet: {WorksheetName}", worksheetName);
+                Console.WriteLine($"Processing worksheet: {worksheetName} with {allRows} total rows");
+                totalProcessedWorksheets++;
 
                 var rangeUsed = worksheet.RangeUsed();
                 if (rangeUsed == null)
@@ -316,6 +334,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                 var rowsUsed = rangeUsed.RowsUsed();
                 if (rowsUsed == null)
                 {
+                    Console.WriteLine($"No rows found in worksheet: {worksheetName}");
                     continue;
                 }
 
@@ -328,8 +347,11 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     if ((this._config.SkipEmptyRows && !row.CellsUsed().Any()) ||
                         (this._config.SkipHiddenRows && worksheet.Row(row.RowNumber()).IsHidden))
                     {
+                        Console.WriteLine($"Skipping row {row.RowNumber()} (empty: {!row.CellsUsed().Any()}, hidden: {worksheet.Row(row.RowNumber()).IsHidden})");
                         continue;
                     }
+                    
+                    processedRows++;
 
                     var rowNumber = row.RowNumber();
                     var cells = row.Cells().ToList();
@@ -472,9 +494,24 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     // Create the chunk with text, number, and metadata
                     var chunk = new Chunk(chunkText, chunkNumber, metadata);
                     result.Sections.Add(chunk);
+                    totalChunks++;
                 }
             }
         } // End using workbook
+
+        Console.WriteLine($"========== PROCESSING COMPLETE ==========");
+        Console.WriteLine($"SUMMARY FOR: {originalFilename ?? "Unknown"}");
+        Console.WriteLine($"Total worksheets: {totalWorksheets}, Processed: {totalProcessedWorksheets}");
+        Console.WriteLine($"Total rows: {totalRows}, Processed: {processedRows}");
+        Console.WriteLine($"Total chunks/records created: {totalChunks}");
+        
+        if (result.Sections.Count != totalChunks)
+        {
+            Console.WriteLine($"WARNING: Mismatch between created chunks ({totalChunks}) and sections in result ({result.Sections.Count})");
+        }
+        
+        this._log.LogInformation("Excel processing complete. Created {ChunkCount} chunks from {RowCount} rows across {WorksheetCount} worksheets.", 
+            totalChunks, processedRows, totalProcessedWorksheets);
 
         return result;
     }
