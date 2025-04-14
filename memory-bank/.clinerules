@@ -253,3 +253,13 @@
 - ~~While this works, it's a brittle solution that depends on the internal structure of the framework.~~ **Warning**: The `GetMemoryDbFromKernelMemory` part of this is **unreliable** for `MemoryServerless` and should be replaced by DI resolution during initialization. The `SetMemoryOnTabularExcelDecoders` reflection might still be necessary if no direct API exists, but acknowledge its fragility.
 - The methods now work with the IMemoryDb interface rather than the concrete AzureCosmosDbTabularMemory class, improving flexibility.
 - Consider requesting a more robust API from the Kernel Memory team for accessing and configuring pipeline components.
+
+#### Fault Tolerance for Memory Operations (Added 2025-04-14)
+- All components that rely on memory DB access have been updated with fault tolerance:
+  - Centralized reflection-based access in the dedicated `MemoryHelper` class in the AzureCosmosDbTabular namespace
+  - `TabularFilterHelper` now gracefully continues with empty results when memory DB is unavailable
+  - `KernelMemoryQueryProcessor` detects missing memory DB and adds _skipDatasetIdentification flag
+  - Clear warning messages for users when reflection-based memory access fails
+  - Detailed diagnostic logging to help track down memory access issues
+- This fault-tolerance approach allows the application to continue functioning with reduced capabilities (no dataset identification or schema validation) when reflection-based memory access fails with MemoryServerless
+- The interim solution is just that - interim. The recommended long-term solution is still DI-based explicit resolution

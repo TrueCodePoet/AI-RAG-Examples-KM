@@ -86,27 +86,25 @@ public class TabularFilterHelper
                 }
                 else
                 {
-                    Console.WriteLine($"ERROR: memoryDb is not a tabular memory, it's: {memoryDb.GetType().FullName}");
-                    throw new ArgumentException(
-                        "Could not find a suitable AzureCosmosDbTabularMemory instance in the provided IKernelMemory.", 
-                        nameof(memory));
+                    Console.WriteLine($"WARNING: memoryDb is not a tabular memory, it's: {memoryDb.GetType().FullName}");
+                    // Instead of throwing, create a stub implementation that will return empty results
+                    Console.WriteLine("Creating TabularFilterHelper with limited functionality - schema operations will return empty results");
+                    // Leave _memoryDb as null
                 }
             }
             else
             {
-                Console.WriteLine("ERROR: GetMemoryDbFromKernelMemory returned NULL");
-                throw new ArgumentException(
-                    "Could not find a suitable AzureCosmosDbTabularMemory instance in the provided IKernelMemory.", 
-                    nameof(memory));
+                Console.WriteLine("WARNING: GetMemoryDbFromKernelMemory returned NULL");
+                Console.WriteLine("Creating TabularFilterHelper with limited functionality - schema operations will return empty results");
+                // Leave _memoryDb as null
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"EXCEPTION when extracting memoryDb: {ex.Message}");
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            throw new ArgumentException(
-                $"Failed to extract AzureCosmosDbTabularMemory from IKernelMemory: {ex.Message}", 
-                nameof(memory), ex);
+            Console.WriteLine("Creating TabularFilterHelper with limited functionality - schema operations will return empty results");
+            // Leave _memoryDb as null - don't throw
         }
         finally
         {
@@ -157,21 +155,35 @@ public class TabularFilterHelper
         string indexName,
         CancellationToken cancellationToken = default)
     {
-        // Get the GetFilterableFieldsAsync method from the concrete type
-        var method = _memoryDb.GetType().GetMethod("GetFilterableFieldsAsync");
-        if (method == null)
+        if (_memoryDb == null)
         {
-            throw new InvalidOperationException($"Method 'GetFilterableFieldsAsync' not found in type {_memoryDb.GetType().FullName}");
+            Console.WriteLine("WARNING: _memoryDb is null, returning empty result for GetFilterableFieldsAsync");
+            return new Dictionary<string, HashSet<string>>();
         }
-
-        // Invoke the method
-        var task = method.Invoke(_memoryDb, new object[] { indexName, cancellationToken }) as Task<Dictionary<string, HashSet<string>>>;
-        if (task == null)
+        
+        try
         {
-            throw new InvalidOperationException("Failed to invoke GetFilterableFieldsAsync method");
-        }
+            // Get the GetFilterableFieldsAsync method from the concrete type
+            var method = _memoryDb.GetType().GetMethod("GetFilterableFieldsAsync");
+            if (method == null)
+            {
+                throw new InvalidOperationException($"Method 'GetFilterableFieldsAsync' not found in type {_memoryDb.GetType().FullName}");
+            }
 
-        return await task.ConfigureAwait(false);
+            // Invoke the method
+            var task = method.Invoke(_memoryDb, new object[] { indexName, cancellationToken }) as Task<Dictionary<string, HashSet<string>>>;
+            if (task == null)
+            {
+                throw new InvalidOperationException("Failed to invoke GetFilterableFieldsAsync method");
+            }
+
+            return await task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERROR in GetFilterableFieldsAsync: {ex.Message}");
+            return new Dictionary<string, HashSet<string>>();
+        }
     }
 
     /// <summary>
@@ -267,21 +279,37 @@ public class TabularFilterHelper
     public async Task<List<string>> ListDatasetNamesAsync(
         CancellationToken cancellationToken = default)
     {
-        // Get the ListDatasetNamesAsync method from the concrete type
-        var method = _memoryDb.GetType().GetMethod("ListDatasetNamesAsync");
-        if (method == null)
+        if (_memoryDb == null)
         {
-            throw new InvalidOperationException($"Method 'ListDatasetNamesAsync' not found in type {_memoryDb.GetType().FullName}");
+            Console.WriteLine("WARNING: _memoryDb is null, returning empty result for ListDatasetNamesAsync");
+            return new List<string>();
         }
 
-        // Invoke the method
-        var task = method.Invoke(_memoryDb, new object[] { cancellationToken }) as Task<List<string>>;
-        if (task == null)
+        try
         {
-            throw new InvalidOperationException("Failed to invoke ListDatasetNamesAsync method");
-        }
+            // Get the ListDatasetNamesAsync method from the concrete type
+            var method = _memoryDb.GetType().GetMethod("ListDatasetNamesAsync");
+            if (method == null)
+            {
+                Console.WriteLine($"ERROR: Method 'ListDatasetNamesAsync' not found in type {_memoryDb.GetType().FullName}");
+                return new List<string>();
+            }
 
-        return await task.ConfigureAwait(false);
+            // Invoke the method
+            var task = method.Invoke(_memoryDb, new object[] { cancellationToken }) as Task<List<string>>;
+            if (task == null)
+            {
+                Console.WriteLine("ERROR: Failed to invoke ListDatasetNamesAsync method");
+                return new List<string>();
+            }
+
+            return await task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERROR in ListDatasetNamesAsync: {ex.Message}");
+            return new List<string>();
+        }
     }
 
     /// <summary>

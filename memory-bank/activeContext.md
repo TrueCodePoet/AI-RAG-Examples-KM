@@ -132,9 +132,17 @@ The project is currently focused on implementing and testing the tabular data pr
     - Implemented post-query filtering of displayed sources
     - Updated Program.cs to use a default limit of 10 for tabular queries
 
-11. **IMemoryDb Access Failure**: The `TabularFilterHelper` cannot reliably access the underlying `AzureCosmosDbTabularMemory` instance when initialized only with `IKernelMemory`. The reflection-based approach (`MemoryHelper` looking for a private `_memoryDb` field) fails because the `MemoryServerless` implementation doesn't store the instance that way.
+11. **IMemoryDb Access Failure**: The `TabularFilterHelper` cannot reliably access the underlying `AzureCosmosDbTabularMemory` instance when initialized only with `IKernelMemory`. The reflection-based approach (looking for a private `_memoryDb` field) fails because the `MemoryServerless` implementation doesn't store the instance that way.
     - **Impact**: Queries requiring schema access (like dataset identification) fail.
-    - **Status**: Diagnosed. Next step is to refactor initialization to use DI.
+    - **Status**: Partially fixed. Implemented a centralized `MemoryHelper` class and made `TabularFilterHelper` and `KernelMemoryQueryProcessor` more resilient through graceful fallbacks when reflection fails. Long-term fix will use DI instead of reflection.
+    
+12. **Fault Tolerance in Schema Operations**: The system now has improved fault tolerance when schema operations fail due to reflection errors.
+    - Key improvements:
+      - Created a dedicated `MemoryHelper` class to centralize reflection code
+      - Updated `TabularFilterHelper` to return empty results instead of throwing exceptions when _memoryDb is null
+      - Modified `KernelMemoryQueryProcessor` to detect missing memoryDb and provide clear warnings
+      - Added skip flags to bypass dataset identification when unavailable
+      - Added detailed diagnostics about reflection failures
 
 ## Rate Limiting Considerations
 

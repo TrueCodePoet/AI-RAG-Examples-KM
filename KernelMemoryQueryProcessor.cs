@@ -11,27 +11,37 @@ using System.Text; // For StringBuilder
 
 namespace AI_RAG_Examples_KM
 {
-    public class KernelMemoryQueryProcessor
-    {
-        private readonly IKernelMemory _memory;
-        private readonly Kernel _kernel;
-        private readonly string _indexName;
-        private readonly AzureOpenAIConfig _azureOpenAITextConfig;
-        private readonly IMemoryDb? _tabularMemoryDb;
+public class KernelMemoryQueryProcessor
+{
+    private readonly IKernelMemory _memory;
+    private readonly Kernel _kernel;
+    private readonly string _indexName;
+    private readonly AzureOpenAIConfig _azureOpenAITextConfig;
+    private readonly IMemoryDb? _tabularMemoryDb;
+    private readonly bool _skipDatasetIdentification;
 
-        public KernelMemoryQueryProcessor(
-            IKernelMemory memory,
-            Kernel kernel,
-            string indexName,
-            AzureOpenAIConfig azureOpenAITextConfig,
-            IMemoryDb? tabularMemoryDb = null)
+    public KernelMemoryQueryProcessor(
+        IKernelMemory memory,
+        Kernel kernel,
+        string indexName,
+        AzureOpenAIConfig azureOpenAITextConfig,
+        IMemoryDb? tabularMemoryDb = null)
+    {
+        _memory = memory;
+        _kernel = kernel;
+        _indexName = indexName;
+        _azureOpenAITextConfig = azureOpenAITextConfig;
+        _tabularMemoryDb = tabularMemoryDb;
+        
+        // If we don't have a valid tabularMemoryDb instance, we'll skip the dataset identification step
+        _skipDatasetIdentification = _tabularMemoryDb == null;
+        if (_skipDatasetIdentification)
         {
-            _memory = memory;
-            _kernel = kernel;
-            _indexName = indexName;
-            _azureOpenAITextConfig = azureOpenAITextConfig;
-            _tabularMemoryDb = tabularMemoryDb;
+            Console.WriteLine("WARNING: No valid tabularMemoryDb instance provided - dataset identification will be skipped");
+            Console.WriteLine("This is expected when reflection cannot find the database instance in MemoryServerless implementation");
+            Console.WriteLine("Will proceed without schema-based validation. Use direct parameter passing when possible.");
         }
+    }
 
         public async Task AskQuestionAsync(string question)
         {

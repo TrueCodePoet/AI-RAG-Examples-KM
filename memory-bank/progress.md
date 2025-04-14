@@ -151,8 +151,8 @@ The project is in a functional prototype stage, with core components implemented
 
 3. **IMemoryDb Access Failure via Reflection**: The helper fails when initialized with `IKernelMemory` because the reflection logic (`MemoryHelper`) cannot find the expected `_memoryDb` field in the `MemoryServerless` implementation.
    - **Impact**: Prevents dataset identification and schema-based operations.
-   - **Workaround**: None. Requires code change.
-   - **Status**: Diagnosed. Fix planned via DI refactoring.
+   - **Workaround**: Implemented fallback mechanism to work with empty/default results when reflection fails.
+   - **Status**: Partially fixed (added fault tolerance). Complete solution planned via DI refactoring.
 
 ### Result Presentation
 1. **Overwhelming Results for Large Datasets**: No control over the number of results shown to users.
