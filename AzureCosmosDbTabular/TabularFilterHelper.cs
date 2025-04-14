@@ -59,6 +59,10 @@ public class TabularFilterHelper
         string indexName = "",
         ILogger<TabularFilterHelper>? logger = null)
     {
+        Console.WriteLine("===== TABULAR FILTER HELPER DETAILED DIAGNOSTICS =====");
+        Console.WriteLine($"Creating TabularFilterHelper with IKernelMemory type: {memory.GetType().FullName}");
+        Console.WriteLine($"Index name provided: '{indexName}'");
+        
         this._memory = memory;
         this._indexName = indexName;
         this._logger = logger ?? Microsoft.KernelMemory.Diagnostics.DefaultLogger.Factory.CreateLogger<TabularFilterHelper>();
@@ -66,13 +70,32 @@ public class TabularFilterHelper
         // Attempt to initialize MemoryDb from IKernelMemory
         try
         {
+            Console.WriteLine("Calling MemoryHelper.GetMemoryDbFromKernelMemory to extract IMemoryDb instance...");
             var memoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(memory);
-            if (memoryDb != null && IsTabularMemoryDb(memoryDb))
+            
+            Console.WriteLine($"GetMemoryDbFromKernelMemory returned: {(memoryDb == null ? "NULL" : memoryDb.GetType().FullName)}");
+            
+            if (memoryDb != null)
             {
-                this._memoryDb = memoryDb;
+                var isTabular = IsTabularMemoryDb(memoryDb);
+                Console.WriteLine($"Is returned memoryDb a tabular memory? {isTabular}");
+                
+                if (isTabular)
+                {
+                    Console.WriteLine("SUCCESS: Valid AzureCosmosDbTabularMemory instance found!");
+                    this._memoryDb = memoryDb;
+                }
+                else
+                {
+                    Console.WriteLine($"ERROR: memoryDb is not a tabular memory, it's: {memoryDb.GetType().FullName}");
+                    throw new ArgumentException(
+                        "Could not find a suitable AzureCosmosDbTabularMemory instance in the provided IKernelMemory.", 
+                        nameof(memory));
+                }
             }
             else
             {
+                Console.WriteLine("ERROR: GetMemoryDbFromKernelMemory returned NULL");
                 throw new ArgumentException(
                     "Could not find a suitable AzureCosmosDbTabularMemory instance in the provided IKernelMemory.", 
                     nameof(memory));
@@ -80,9 +103,15 @@ public class TabularFilterHelper
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"EXCEPTION when extracting memoryDb: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
             throw new ArgumentException(
                 $"Failed to extract AzureCosmosDbTabularMemory from IKernelMemory: {ex.Message}", 
                 nameof(memory), ex);
+        }
+        finally
+        {
+            Console.WriteLine("===== END TABULAR FILTER HELPER DIAGNOSTICS =====");
         }
     }
 
@@ -91,7 +120,32 @@ public class TabularFilterHelper
     /// </summary>
     private bool IsTabularMemoryDb(IMemoryDb memoryDb)
     {
-        return memoryDb.GetType().FullName?.Contains("AzureCosmosDbTabularMemory") == true;
+        var type = memoryDb.GetType();
+        Console.WriteLine($"IsTabularMemoryDb checking type: {type.FullName}");
+        
+        // Check by type name (case-insensitive)
+        bool containsTabularByName = type.FullName?.IndexOf("AzureCosmosDbTabularMemory", StringComparison.OrdinalIgnoreCase) >= 0;
+        
+        // Check by full inheritance chain
+        bool isCastableToTabular = false;
+        try {
+            isCastableToTabular = memoryDb is AzureCosmosDbTabularMemory;
+            Console.WriteLine($"Direct cast check result: {isCastableToTabular}");
+        }
+        catch (Exception ex) {
+            Console.WriteLine($"Exception during cast check: {ex.Message}");
+        }
+        
+        // Check by interface implementation
+        var interfaces = type.GetInterfaces();
+        bool implementsTabularInterfaces = interfaces.Any(i => 
+            i.FullName?.Contains("ITabularMemoryDb") == true || 
+            i.FullName?.Contains("TabularMemoryInterface") == true);
+        
+        Console.WriteLine($"Type check results: ByName={containsTabularByName}, ByCast={isCastableToTabular}, ByInterface={implementsTabularInterfaces}");
+        
+        // Accept if any check passes
+        return containsTabularByName || isCastableToTabular || implementsTabularInterfaces;
     }
 
     /// <summary>

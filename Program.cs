@@ -46,8 +46,23 @@ var standardMemory = KernelInitializer.InitializeMemory(
 
 // Set up TabularExcelDecoder for the tabular pipeline
 var tabularMemoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(tabularMemory);
+
+// Detailed verification of tabularMemoryDb before using it
+Console.WriteLine("\n=== VERIFICATION OF tabularMemoryDb INSTANCE ===");
 if (tabularMemoryDb != null)
 {
+    Console.WriteLine($"• tabularMemoryDb Type: {tabularMemoryDb.GetType().FullName}");
+    Console.WriteLine($"• Is AzureCosmosDbTabularMemory: {tabularMemoryDb.GetType().FullName?.Contains("AzureCosmosDbTabularMemory") == true}");
+    Console.WriteLine($"• Implements IMemoryDb: {tabularMemoryDb is IMemoryDb}");
+    
+    // Try to cast to confirm if it's actually AzureCosmosDbTabularMemory
+    var isAzureCosmosDbTabularMemory = tabularMemoryDb is AzureCosmosDbTabularMemory;
+    Console.WriteLine($"• Direct cast to AzureCosmosDbTabularMemory: {isAzureCosmosDbTabularMemory}");
+    
+    // Check if type name contains substring in a case-insensitive way
+    var containsTabularIgnoreCase = tabularMemoryDb.GetType().FullName?.IndexOf("TabularMemory", StringComparison.OrdinalIgnoreCase) >= 0;
+    Console.WriteLine($"• Name contains 'TabularMemory' (case insensitive): {containsTabularIgnoreCase}");
+    
     Console.WriteLine("Successfully obtained IMemoryDb instance for tabular pipeline");
     
     // Find and update TabularExcelDecoder instances in the pipeline
@@ -57,6 +72,7 @@ else
 {
     Console.WriteLine("Warning: Could not obtain IMemoryDb instance for tabular pipeline");
 }
+Console.WriteLine("=== END VERIFICATION ===\n");
 
 // Create BlobStorageProcessor instances for each pipeline
 var tabularFileProcessor = new BlobStorageProcessor(
@@ -110,7 +126,7 @@ async Task QueryKernelMemory()
 
     Console.WriteLine($"\n*** Searching Tabular Index for: {Question} ***");
     // Pass a result limit of 10 to limit the displayed results
-    await tabularQueryProcessor.AskTabularQuestionAsync(Question, resultLimit: 10);
+    await tabularQueryProcessor.AskTabularQuestionAsync(Question, resultLimit: 100);
     
     Console.WriteLine($"\n*** Searching Standard Index for: {Question} ***");
     await standardQueryProcessor.AskQuestionAsync(Question);
@@ -144,34 +160,86 @@ internal static class MemoryHelper
     {
         try
         {
+            Console.WriteLine("=== DIAGNOSTIC: Getting IMemoryDb from IKernelMemory ===");
+            Console.WriteLine($"IKernelMemory implementation type: {memory.GetType().FullName}");
+            
             // Use reflection to access the internal _memoryDb field
             var memoryType = memory.GetType();
+            
+            // List all fields to see what's available
+            var allFields = memoryType.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Console.WriteLine($"Found {allFields.Length} private instance fields in {memoryType.Name}:");
+            foreach (var field in allFields)
+            {
+                Console.WriteLine($"  - {field.Name} ({field.FieldType.Name})");
+            }
+            
             var memoryDbField = memoryType.GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             
             if (memoryDbField != null)
             {
+                Console.WriteLine($"Found _memoryDb field of type {memoryDbField.FieldType.FullName}");
                 var memoryDb = memoryDbField.GetValue(memory);
+                
+                if (memoryDb == null)
+                {
+                    Console.WriteLine("WARNING: _memoryDb field exists but its value is null");
+                    return null;
+                }
+                
+                Console.WriteLine($"_memoryDb instance is of type: {memoryDb.GetType().FullName}");
                 
                 // Check if it's an IMemoryDb
                 if (memoryDb is IMemoryDb memoryDbInstance)
                 {
+                    Console.WriteLine("Successfully cast to IMemoryDb");
+                    
+                    // Check if it's the specific AzureCosmosDbTabularMemory type we need
+                    if (memoryDbInstance is AzureCosmosDbTabularMemory)
+                    {
+                        Console.WriteLine("SUCCESS: _memoryDb is an AzureCosmosDbTabularMemory instance");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"WARNING: _memoryDb is IMemoryDb but not AzureCosmosDbTabularMemory, it's {memoryDbInstance.GetType().FullName}");
+                    }
+                    
                     return memoryDbInstance;
                 }
                 else
                 {
-                    Console.WriteLine($"Memory DB is not IMemoryDb, it's {memoryDb?.GetType().FullName ?? "null"}");
+                    Console.WriteLine($"ERROR: Memory DB is not IMemoryDb, it's {memoryDb.GetType().FullName}");
                 }
             }
             else
             {
-                Console.WriteLine("Could not find _memoryDb field in memory object");
+                Console.WriteLine("ERROR: Could not find _memoryDb field in memory object");
+                
+                // Try to look for alternative field names that might contain the memory DB
+                var potentialFields = allFields.Where(f => 
+                    f.Name.Contains("memory", StringComparison.OrdinalIgnoreCase) || 
+                    f.Name.Contains("db", StringComparison.OrdinalIgnoreCase) ||
+                    f.FieldType.Name.Contains("Memory", StringComparison.OrdinalIgnoreCase) ||
+                    f.FieldType.Name.Contains("Db", StringComparison.OrdinalIgnoreCase)).ToList();
+                
+                if (potentialFields.Any())
+                {
+                    Console.WriteLine("Potential alternative fields found:");
+                    foreach (var field in potentialFields)
+                    {
+                        var value = field.GetValue(memory);
+                        Console.WriteLine($"  - {field.Name} ({field.FieldType.Name}): {(value == null ? "null" : value.GetType().FullName)}");
+                    }
+                }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error getting memory DB: {ex.Message}");
+            Console.WriteLine($"ERROR getting memory DB: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
         }
         
+        Console.WriteLine("=== END DIAGNOSTIC ===");
         return null;
     }
 
