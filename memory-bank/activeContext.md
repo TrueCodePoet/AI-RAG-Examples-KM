@@ -62,11 +62,12 @@ The project is currently focused on implementing and testing the tabular data pr
 ## Next Steps
 
 ### Short-term Tasks
-1. **Testing with Larger Datasets**: Test the system with larger Excel files to evaluate performance and accuracy
-2. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries
-3. **Error Handling**: Continue improving error handling for edge cases in Excel processing
-4. **Documentation**: Add more detailed documentation on the tabular data processing capabilities
-5. **Result Presentation**: Further enhance the result limiting feature with pagination or summarization options
+1. **Refactor Memory Initialization**: Modify `KernelInitializer.InitializeMemory` to use DI to resolve the `IMemoryDb` instance and return it alongside `IKernelMemory`. Update `Program.cs` to use this resolved instance and remove the `MemoryHelper` reflection logic.
+2. **Testing with Larger Datasets**: Test the system with larger Excel files to evaluate performance and accuracy
+3. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries
+4. **Error Handling**: Continue improving error handling for edge cases in Excel processing
+5. **Documentation**: Add more detailed documentation on the tabular data processing capabilities
+6. **Result Presentation**: Further enhance the result limiting feature with pagination or summarization options
 
 ### Medium-term Goals
 1. **Support for Additional File Formats**: Extend the tabular processing to other structured formats (CSV, JSON, etc.)
@@ -90,7 +91,7 @@ The project is currently focused on implementing and testing the tabular data pr
 5. **Text Field Parsing**: Implemented a robust approach to extract all data (metadata and row data) from the text field using a combination of regex for the prefix and manual string splitting/parsing for the data section.
 6. **Partial Class Organization**: Used C# partial classes to organize the large AzureCosmosDbTabularMemory implementation into logical groupings while maintaining a single cohesive class.
 7. **Filename Priority for Schema Generation**: Modified the `ExtractSchemaFromWorkbook` method to prioritize the provided file path over workbook metadata (Title property) when determining the source file name.
-8. **Reflection-Based Access to TabularMemory Methods**: Used .NET Reflection API in TabularFilterHelper to invoke methods safely without requiring cast to concrete types, improving robustness and maintainability.
+8. **Dependency Injection for Service Resolution**: Decided against using reflection (`MemoryHelper`) to access internal `IKernelMemory` components as it proved unreliable with `MemoryServerless`. Will refactor to use the standard Dependency Injection pattern (`IServiceProvider.GetRequiredService<IMemoryDb>`) during initialization to retrieve necessary service instances like `IMemoryDb`.
 9. **Result Limiting Approach**: Implemented result limiting post-query to allow the LLM to still have access to all information while controlling what's displayed to the user.
 
 ### Open Questions
@@ -130,6 +131,10 @@ The project is currently focused on implementing and testing the tabular data pr
     - Solution: Added resultLimit parameter to AskTabularQuestionAsync
     - Implemented post-query filtering of displayed sources
     - Updated Program.cs to use a default limit of 10 for tabular queries
+
+11. **IMemoryDb Access Failure**: The `TabularFilterHelper` cannot reliably access the underlying `AzureCosmosDbTabularMemory` instance when initialized only with `IKernelMemory`. The reflection-based approach (`MemoryHelper` looking for a private `_memoryDb` field) fails because the `MemoryServerless` implementation doesn't store the instance that way.
+    - **Impact**: Queries requiring schema access (like dataset identification) fail.
+    - **Status**: Diagnosed. Next step is to refactor initialization to use DI.
 
 ## Rate Limiting Considerations
 

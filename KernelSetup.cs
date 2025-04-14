@@ -3,8 +3,10 @@ using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.AI.AzureOpenAI;
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDb; // Added for WithAzureCosmosDbMemory extension method
+using Microsoft.KernelMemory.MemoryStorage; // For IMemoryDb
 using Microsoft.SemanticKernel;
 using Azure.Search.Documents; // Added for SearchClientConfig
+using Microsoft.Azure.Cosmos; // For CosmosClient
 
 namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project name
 {
@@ -89,6 +91,7 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
         /// <param name="useTabularPipeline">Whether to use tabular-specific pipeline configuration</param>
         /// <param name="indexName">The index name to use</param>
         /// <returns>Configured IKernelMemory instance</returns>
+
         public static IKernelMemory InitializeMemory(
             AzureOpenAIConfig textConfig, 
             AzureOpenAIConfig embeddingConfig, 

@@ -171,11 +171,11 @@ flowchart TD
    - Uses field paths compatible with Cosmos DB's Vector Index requirements
 
 6. **Robust Memory DB Access**
-   - Enhanced `TabularFilterHelper` with multi-level fallback strategies for accessing the memory DB
-   - Implemented progressive reflection to find the memory DB in multiple possible locations
-   - Added index name parameter to `TabularFilterHelper` constructor for improved context
-   - Updated log messages to provide detailed diagnostic information during memory DB access
-   - Ensured consistent usage of the memory DB access pattern across the application
+   - Created dedicated `MemoryHelper` class to centralize reflection-based access code
+   - Improved diagnostic logging with detailed information during memory DB access attempts
+   - Added multi-level fallback strategies for discovering the memory DB in different implementations
+   - Designed for an eventual transition to Dependency Injection in future versions
+   - Clear separation between the reflection-based approach (current) and the planned DI-based approach
 
 6. **Modular Pipeline Architecture**
    - Allows for customization of processing steps

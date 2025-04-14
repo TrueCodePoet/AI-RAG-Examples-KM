@@ -80,6 +80,19 @@
   }
   ```
 
+## Component Architecture
+
+### Memory Access Patterns
+- **Reflection-Based Access**: The `MemoryHelper` class uses reflection to access internal components of the Kernel Memory framework:
+  - Used to extract the `IMemoryDb` instance from `IKernelMemory` instances
+  - Enables the TabularFilterHelper to perform schema-based operations
+  - Has reliability issues with different implementations like `MemoryServerless`
+  - Will be replaced by Dependency Injection in future versions
+- **Planned Dependency Injection**: Future refactoring will use DI to directly resolve and pass required service instances:
+  - `KernelInitializer.InitializeMemory` will return both `IKernelMemory` and `IMemoryDb` instances
+  - Components will receive direct references to required services
+  - Eliminates dependency on internal field structures that may change
+
 ## Technical Constraints
 
 ### Azure OpenAI Limitations

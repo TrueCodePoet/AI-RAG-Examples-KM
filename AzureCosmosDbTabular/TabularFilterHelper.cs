@@ -11,7 +11,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.Diagnostics;
 using Microsoft.KernelMemory.MemoryStorage;
-using AI_RAG_Examples_KM; // For MemoryHelper
 
 namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 

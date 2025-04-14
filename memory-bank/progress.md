@@ -149,6 +149,11 @@ The project is in a functional prototype stage, with core components implemented
    - **Workaround**: None needed, issue has been fixed.
    - **Status**: Fixed by implementing explicit method lookup and invocation via reflection with strong error handling.
 
+3. **IMemoryDb Access Failure via Reflection**: The helper fails when initialized with `IKernelMemory` because the reflection logic (`MemoryHelper`) cannot find the expected `_memoryDb` field in the `MemoryServerless` implementation.
+   - **Impact**: Prevents dataset identification and schema-based operations.
+   - **Workaround**: None. Requires code change.
+   - **Status**: Diagnosed. Fix planned via DI refactoring.
+
 ### Result Presentation
 1. **Overwhelming Results for Large Datasets**: No control over the number of results shown to users.
    - **Impact**: Users could be overwhelmed by large result sets, especially for queries matching many records.
@@ -195,18 +200,24 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-11 | Fixed memory DB access in TabularFilterHelper | Completed |
 | 2025-04-11 | Redesigned TabularFilterHelper to use Reflection API | Completed |
 | 2025-04-11 | Added result limiting capability to control displayed sources | Completed |
+| 2025-04-14 | Diagnosed IMemoryDb access failure | Completed |
 | 2025-04-10 | End-to-end testing | In Progress |
 | 2025-04-15 | Performance optimization | Not Started |
 | 2025-04-20 | Documentation and examples | In Progress |
 
 ## Next Milestone Targets
 
-1. **Complete end-to-end testing** (Target: 2025-04-12)
+1. **Refactor Memory Initialization using DI** (Target: 2025-04-14)
+   - Modify `KernelInitializer.InitializeMemory` to return resolved `IMemoryDb`.
+   - Update `Program.cs` to use DI resolution, remove `MemoryHelper`.
+   - Update `TabularFilterHelper` constructor usage.
+
+2. **Complete end-to-end testing** (Target: 2025-04-15)
    - Test with various Excel file formats
    - Validate query accuracy and performance
    - Document test results and findings
 
-2. **Implement performance optimizations** (Target: 2025-04-18)
+3. **Implement performance optimizations** (Target: 2025-04-18)
    - Optimize memory usage during processing
    - Improve query execution efficiency
    - Implement caching strategies
