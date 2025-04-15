@@ -111,6 +111,7 @@ public static class DependencyInjection
 
         builder.Services.AddSingleton(config);
         builder.Services.AddSingleton<IContentDecoder, TabularExcelDecoder>();
+        builder.Services.AddSingleton<IContentDecoder, TabularCsvDecoder>();
 
         return builder;
     }
