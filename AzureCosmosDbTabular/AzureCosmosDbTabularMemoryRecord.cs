@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.MemoryStorage;
+using Microsoft.Extensions.Logging;
 
 // No longer using the alias as we change the property type
 // using Embedding = Microsoft.KernelMemory.Embedding; 
@@ -203,7 +204,8 @@ internal class AzureCosmosDbTabularMemoryRecord
         Dictionary<string, object>? data = null,
         Dictionary<string, string>? source = null,
         string? schemaId = null,
-        string? importBatchId = null)
+        string? importBatchId = null,
+        Microsoft.Extensions.Logging.ILogger? logger = null)
     {
         var id = EncodeId(record.Id);
         var fileId = record.GetFileId();
@@ -219,50 +221,50 @@ internal class AzureCosmosDbTabularMemoryRecord
         if (record.Payload.TryGetValue("schema_id", out var schemaIdObj) && schemaIdObj is string schemaIdStr)
         {
             extractedSchemaId = schemaIdStr;
-            Console.WriteLine($"FromMemoryRecord: Extracted schema ID from payload: {extractedSchemaId}");
+            logger?.LogDebug("FromMemoryRecord: Extracted schema ID from payload: {SchemaId}", extractedSchemaId);
         }
 
         if (record.Payload.TryGetValue("import_batch_id", out var importBatchIdObj) && importBatchIdObj is string importBatchIdStr)
         {
             extractedImportBatchId = importBatchIdStr;
-            Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from payload: {extractedImportBatchId}");
+            logger?.LogDebug("FromMemoryRecord: Extracted import batch ID from payload: {ImportBatchId}", extractedImportBatchId);
         }
 
         // Extract source information from metadata if available
         if (record.Payload.TryGetValue("worksheetName", out var worksheetNameObj) && worksheetNameObj is string worksheetName)
         {
             extractedSource["_worksheet"] = worksheetName;
-            Console.WriteLine($"FromMemoryRecord: Extracted worksheet name from metadata: {worksheetName}");
+            logger?.LogDebug("FromMemoryRecord: Extracted worksheet name from metadata: {WorksheetName}", worksheetName);
         }
 
         if (record.Payload.TryGetValue("rowNumber", out var rowNumberObj) && rowNumberObj is string rowNumber)
         {
             extractedSource["_rowNumber"] = rowNumber;
-            Console.WriteLine($"FromMemoryRecord: Extracted row number from metadata: {rowNumber}");
+            logger?.LogDebug("FromMemoryRecord: Extracted row number from metadata: {RowNumber}", rowNumber);
         }
 
         // Extract tabular data from the text field in the payload
         if (record.Payload.TryGetValue("text", out var textObj) && textObj is string text && !string.IsNullOrEmpty(text))
         {
-            Console.WriteLine($"FromMemoryRecord: Parsing text field for record {record.Id}");
-            
+            logger?.LogDebug("FromMemoryRecord: Parsing text field for record {RecordId}", record.Id);
+
             // Parse the text field to extract tabular data
-            ParseSentenceFormat(text, extractedData, extractedSource);
-            
+            ParseSentenceFormat(text, extractedData, extractedSource, logger);
+
             // Extract schema ID and import batch ID from the source dictionary if they were parsed
             if (string.IsNullOrEmpty(extractedSchemaId) && extractedSource.TryGetValue("schema_id", out var parsedSchemaId))
             {
                 extractedSchemaId = parsedSchemaId;
-                Console.WriteLine($"FromMemoryRecord: Extracted schema ID from text: {extractedSchemaId}");
+                logger?.LogDebug("FromMemoryRecord: Extracted schema ID from text: {SchemaId}", extractedSchemaId);
             }
-            
+
             if (string.IsNullOrEmpty(extractedImportBatchId) && extractedSource.TryGetValue("import_batch_id", out var parsedImportBatchId))
             {
                 extractedImportBatchId = parsedImportBatchId;
-                Console.WriteLine($"FromMemoryRecord: Extracted import batch ID from text: {extractedImportBatchId}");
+                logger?.LogDebug("FromMemoryRecord: Extracted import batch ID from text: {ImportBatchId}", extractedImportBatchId);
             }
-            
-            Console.WriteLine($"FromMemoryRecord: Extracted {extractedData.Count} data fields from text");
+
+            logger?.LogDebug("FromMemoryRecord: Extracted {Count} data fields from text", extractedData.Count);
         }
 
         // Prioritize extracted data, use parameter as fallback ONLY if extractedData is empty
@@ -272,12 +274,18 @@ internal class AzureCosmosDbTabularMemoryRecord
         // Log the provided schema ID and import batch ID
         if (!string.IsNullOrEmpty(schemaId))
         {
-            Console.WriteLine($"FromMemoryRecord: Provided schema ID parameter: {schemaId}");
+            if (!string.IsNullOrEmpty(schemaId))
+            {
+                logger?.LogDebug("FromMemoryRecord: Provided schema ID parameter: {SchemaId}", schemaId);
+            }
         }
         
         if (!string.IsNullOrEmpty(importBatchId))
         {
-            Console.WriteLine($"FromMemoryRecord: Provided import batch ID parameter: {importBatchId}");
+            if (!string.IsNullOrEmpty(importBatchId))
+            {
+                logger?.LogDebug("FromMemoryRecord: Provided import batch ID parameter: {ImportBatchId}", importBatchId);
+            }
         }
 
         // Determine final schema ID and import batch ID values
@@ -288,13 +296,13 @@ internal class AzureCosmosDbTabularMemoryRecord
         if (!string.IsNullOrEmpty(finalSchemaId))
         {
             finalSource["schema_id"] = finalSchemaId;
-            Console.WriteLine($"FromMemoryRecord: Added schema ID to source dictionary: {finalSchemaId}");
+            logger?.LogDebug("FromMemoryRecord: Added schema ID to source dictionary: {SchemaId}", finalSchemaId);
         }
 
         if (!string.IsNullOrEmpty(finalImportBatchId))
         {
             finalSource["import_batch_id"] = finalImportBatchId;
-            Console.WriteLine($"FromMemoryRecord: Added import batch ID to source dictionary: {finalImportBatchId}");
+            logger?.LogDebug("FromMemoryRecord: Added import batch ID to source dictionary: {ImportBatchId}", finalImportBatchId);
         }
 
         // Create a new tags collection and copy items from the original one
@@ -325,19 +333,19 @@ internal class AzureCosmosDbTabularMemoryRecord
         };
         
         // Log the values that were set on the record
-        Console.WriteLine($"FromMemoryRecord: Set SchemaId={memoryRecord.SchemaId}, ImportBatchId={memoryRecord.ImportBatchId}");
-        
+        logger?.LogDebug("FromMemoryRecord: Set SchemaId={SchemaId}, ImportBatchId={ImportBatchId}", memoryRecord.SchemaId, memoryRecord.ImportBatchId);
+
         // Ensure schema ID and import batch ID are also in the payload
         if (!string.IsNullOrEmpty(memoryRecord.SchemaId) && !memoryRecord.Payload.ContainsKey("schema_id"))
         {
             memoryRecord.Payload["schema_id"] = memoryRecord.SchemaId;
-            Console.WriteLine($"FromMemoryRecord: Added schema ID to payload: {memoryRecord.SchemaId}");
+            logger?.LogDebug("FromMemoryRecord: Added schema ID to payload: {SchemaId}", memoryRecord.SchemaId);
         }
-        
+
         if (!string.IsNullOrEmpty(memoryRecord.ImportBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
         {
             memoryRecord.Payload["import_batch_id"] = memoryRecord.ImportBatchId;
-            Console.WriteLine($"FromMemoryRecord: Added import batch ID to payload: {memoryRecord.ImportBatchId}");
+            logger?.LogDebug("FromMemoryRecord: Added import batch ID to payload: {ImportBatchId}", memoryRecord.ImportBatchId);
         }
 
         return memoryRecord;
@@ -362,74 +370,78 @@ internal class AzureCosmosDbTabularMemoryRecord
     private static readonly Regex s_keyValueRegex = new(@"(?<!\bRecord from worksheet [^,]+, row \d+: )([^.:\s]+) is ([^.]+)\.", RegexOptions.Compiled);
     
     // Parse text in the sentence format: "Record from worksheet Sheet1, row 123: schema_id is abc123. import_batch_id is xyz789. Column1 is Value1. Column2 is Value2."
-    private static void ParseSentenceFormat(string text, Dictionary<string, object> data, Dictionary<string, string> source)
+    private static void ParseSentenceFormat(
+        string text,
+        Dictionary<string, object> data,
+        Dictionary<string, string> source,
+        Microsoft.Extensions.Logging.ILogger? logger = null)
     {
-        Console.WriteLine($"ParseSentenceFormat: Full text length: {text.Length} characters");
-        Console.WriteLine($"ParseSentenceFormat: Parsing text: {text.Substring(0, Math.Min(100, text.Length))}...");
-        
+        logger?.LogTrace("ParseSentenceFormat: Full text length: {Length} characters", text.Length);
+        logger?.LogTrace("ParseSentenceFormat: Parsing text: {Preview}...", text.Substring(0, Math.Min(100, text.Length)));
+
         // First, find all occurrences of the record pattern to detect concatenated text
         var allMatches = s_worksheetRowRegex.Matches(text);
-        Console.WriteLine($"ParseSentenceFormat: Found {allMatches.Count} record pattern matches in text");
-        
+        logger?.LogTrace("ParseSentenceFormat: Found {Count} record pattern matches in text", allMatches.Count);
+
         if (allMatches.Count > 1)
         {
             // Multiple matches detected - text contains multiple concatenated records
-            Console.WriteLine("ParseSentenceFormat: WARNING - Detected multiple record patterns in text!");
-            Console.WriteLine("ParseSentenceFormat: Will only process the first record pattern match");
-            
+            logger?.LogDebug("ParseSentenceFormat: WARNING - Detected multiple record patterns in text!");
+            logger?.LogDebug("ParseSentenceFormat: Will only process the first record pattern match");
+
             // Truncate text to only include the first record pattern through to the start of the second pattern
             int secondMatchStart = allMatches[1].Index;
             text = text.Substring(0, secondMatchStart);
-            Console.WriteLine($"ParseSentenceFormat: Truncated text to first {secondMatchStart} characters");
+            logger?.LogTrace("ParseSentenceFormat: Truncated text to first {Chars} characters", secondMatchStart);
         }
-        
+
         // Extract worksheet name and row number using regex - use the first match
         var worksheetRowMatch = s_worksheetRowRegex.Match(text);
         if (worksheetRowMatch.Success)
         {
             string worksheet = worksheetRowMatch.Groups[1].Value.Trim();
             string rowStr = worksheetRowMatch.Groups[2].Value.Trim();
-            
+
             if (int.TryParse(rowStr, out int rowNum))
             {
                 source["_worksheet"] = worksheet;
                 source["_rowNumber"] = rowNum.ToString();
-                Console.WriteLine($"ParseSentenceFormat: Extracted worksheet={worksheet}, row={rowNum}");
-                
+                logger?.LogDebug("ParseSentenceFormat: Extracted worksheet={Worksheet}, row={RowNum}", worksheet, rowNum);
+
                 // Extract the data section (everything after the colon)
                 // Ensure we're using the first colon that belongs to our matched pattern
                 int matchEndIndex = worksheetRowMatch.Index + worksheetRowMatch.Length;
                 int colonIndex = text.IndexOf(':', worksheetRowMatch.Index);
-                
+
                 if (colonIndex > 0)
                 {
                     string dataSection = text.Substring(colonIndex + 1).Trim();
-                    Console.WriteLine($"ParseSentenceFormat: Isolated data section length: {dataSection.Length} characters");
-                    Console.WriteLine($"ParseSentenceFormat: Isolated data section: {dataSection.Substring(0, Math.Min(100, dataSection.Length))}...");
-                    
+                    logger?.LogTrace("ParseSentenceFormat: Isolated data section length: {Length} characters", dataSection.Length);
+                    logger?.LogTrace("ParseSentenceFormat: Isolated data section: {Preview}...", dataSection.Substring(0, Math.Min(100, dataSection.Length)));
+
                     // Look for the next "Record from worksheet" pattern to stop processing
                     int nextRecordIndex = dataSection.IndexOf("Record from worksheet", StringComparison.OrdinalIgnoreCase);
                     if (nextRecordIndex > 0)
                     {
-                        Console.WriteLine($"ParseSentenceFormat: Found another record pattern at position {nextRecordIndex} in data section - truncating");
+                        logger?.LogTrace("ParseSentenceFormat: Found another record pattern at position {Pos} in data section - truncating", nextRecordIndex);
                         dataSection = dataSection.Substring(0, nextRecordIndex);
                     }
-                    
+
                     // Process the data section manually to avoid regex issues
                     string[] pairs = dataSection.Split(new[] { ". " }, StringSplitOptions.RemoveEmptyEntries);
-                    Console.WriteLine($"ParseSentenceFormat: Split data section into {pairs.Length} key-value pairs");
-                    
+                    logger?.LogTrace("ParseSentenceFormat: Split data section into {Count} key-value pairs", pairs.Length);
+
                     foreach (string pair in pairs)
                     {
                         string trimmedPair = pair.Trim();
                         if (string.IsNullOrEmpty(trimmedPair)) continue;
-                        
+
                         // Add a period if it's missing (for the last pair)
                         if (!trimmedPair.EndsWith("."))
                         {
                             trimmedPair += ".";
                         }
-                        
+
                         // Extract key and value using simple string operations
                         int isIndex = trimmedPair.IndexOf(" is ");
                         if (isIndex > 0)
@@ -437,17 +449,17 @@ internal class AzureCosmosDbTabularMemoryRecord
                             string key = trimmedPair.Substring(0, isIndex).Trim();
                             // Remove the trailing period from the value
                             string valueStr = trimmedPair.Substring(isIndex + 4).TrimEnd('.').Trim();
-                            
+
                             // Special handling for schema_id and import_batch_id
                             if (key.Equals("schema_id", StringComparison.OrdinalIgnoreCase))
                             {
                                 source["schema_id"] = valueStr;
-                                Console.WriteLine($"ParseSentenceFormat: Extracted schema_id={valueStr} to source dictionary");
+                                logger?.LogDebug("ParseSentenceFormat: Extracted schema_id={SchemaId} to source dictionary", valueStr);
                             }
                             else if (key.Equals("import_batch_id", StringComparison.OrdinalIgnoreCase))
                             {
                                 source["import_batch_id"] = valueStr;
-                                Console.WriteLine($"ParseSentenceFormat: Extracted import_batch_id={valueStr} to source dictionary");
+                                logger?.LogDebug("ParseSentenceFormat: Extracted import_batch_id={ImportBatchId} to source dictionary", valueStr);
                             }
                             else
                             {
@@ -456,28 +468,28 @@ internal class AzureCosmosDbTabularMemoryRecord
                                 {
                                     // Normalize the key to snake_case format
                                     string normalizedKey = AzureCosmosDbTabularMemory.NormalizeColumnName(key);
-                                    
+
                                     // Convert value to appropriate type for regular data fields
                                     object value = ConvertToTypedValue(valueStr);
                                     data[normalizedKey] = value;
-                                    Console.WriteLine($"ParseSentenceFormat: Added {normalizedKey}={valueStr} (original key: {key}) to data dictionary");
+                                    logger?.LogTrace("ParseSentenceFormat: Added {Key}={Value} (original key: {OriginalKey}) to data dictionary", normalizedKey, valueStr, key);
                                 }
                                 else
                                 {
-                                    Console.WriteLine($"ParseSentenceFormat: Skipping key that looks like a record prefix: {key}");
+                                    logger?.LogTrace("ParseSentenceFormat: Skipping key that looks like a record prefix: {Key}", key);
                                 }
                             }
                         }
                     }
-                    
+
                     // Log the data dictionary contents for debugging
-                    Console.WriteLine($"ParseSentenceFormat: Data dictionary now contains {data.Count} fields");
+                    logger?.LogTrace("ParseSentenceFormat: Data dictionary now contains {Count} fields", data.Count);
                 }
             }
         }
         else
         {
-            Console.WriteLine($"ParseSentenceFormat: Failed to match worksheet and row pattern in text");
+            logger?.LogDebug("ParseSentenceFormat: Failed to match worksheet and row pattern in text");
         }
     }
 
@@ -525,7 +537,7 @@ internal class AzureCosmosDbTabularMemoryRecord
                 // Convert value to appropriate type
                 object value = ConvertToTypedValue(valueStr);
                 data[normalizedKey] = value;
-                Console.WriteLine($"ParseKeyValueFormat: Added {normalizedKey}={valueStr} (original key: {key}) to data dictionary");
+                // Optionally: add logger?.LogTrace here if needed for ParseKeyValueFormat
             }
         }
     }
