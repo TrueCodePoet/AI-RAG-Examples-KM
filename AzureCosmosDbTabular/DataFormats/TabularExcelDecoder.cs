@@ -343,158 +343,171 @@ public sealed class TabularExcelDecoder : IContentDecoder
 
                 foreach (var row in rowsUsed.Skip(startRow))
                 {
-                    // Skip row if configured to skip empty or hidden rows
-                    if ((this._config.SkipEmptyRows && !row.CellsUsed().Any()) ||
-                        (this._config.SkipHiddenRows && worksheet.Row(row.RowNumber()).IsHidden))
+                    try
                     {
-                        Console.WriteLine($"Skipping row {row.RowNumber()} (empty: {!row.CellsUsed().Any()}, hidden: {worksheet.Row(row.RowNumber()).IsHidden})");
+                        // Skip row if configured to skip empty or hidden rows
+                        bool isEmpty = !row.CellsUsed().Any();
+                        bool isHidden = worksheet.Row(row.RowNumber()).IsHidden;
+                        if ((this._config.SkipEmptyRows && isEmpty) ||
+                            (this._config.SkipHiddenRows && isHidden))
+                        {
+                            if (isEmpty)
+                                this._log.LogWarning("Skipping empty row {RowNumber} in worksheet {WorksheetName}", row.RowNumber(), worksheetName);
+                            if (isHidden)
+                                this._log.LogWarning("Skipping hidden row {RowNumber} in worksheet {WorksheetName}", row.RowNumber(), worksheetName);
+                            continue;
+                        }
+
+                        processedRows++;
+
+                        var rowNumber = row.RowNumber();
+                        var cells = row.Cells().ToList();
+
+                        // Create a dictionary to hold the row data
+                        var rowData = new Dictionary<string, object>();
+
+                        // Add metadata if configured
+                        if (this._config.IncludeWorksheetNames)
+                        {
+                            rowData["_worksheet"] = worksheetName;
+                        }
+
+                        if (this._config.IncludeRowNumbers)
+                        {
+                            rowData["_rowNumber"] = rowNumber;
+                        }
+
+                        // Process each cell in the row
+                        for (var i = 0; i < cells.Count; i++)
+                        {
+                            var cell = cells[i];
+
+                            // Skip hidden columns if configured
+                            if (this._config.SkipHiddenColumns && worksheet.Column(cell.Address.ColumnNumber).IsHidden)
+                            {
+                                continue;
+                            }
+
+                            // Get the column name (from headers or generate one)
+                            string columnName;
+                            if (this._config.UseFirstRowAsHeader && i < headers.Count)
+                            {
+                                columnName = headers[i];
+                            }
+                            else
+                            {
+                                columnName = $"{this._config.DefaultColumnPrefix}{cell.Address.ColumnNumber}";
+                            }
+
+                            // Extract the cell value based on its type
+                            object cellValue = this.ExtractCellValue(cell);
+
+                            // Add to row data
+                            rowData[columnName] = cellValue;
+                        }
+
+                        // Add schema ID and import batch ID if available - ensure they're in the payload
+                        if (!string.IsNullOrEmpty(schemaId))
+                        {
+                            // Add to the row data to ensure it gets into the payload
+                            rowData["schema_id"] = schemaId;
+                            Console.WriteLine($"TabularExcelDecoder: Adding schema ID to row data: {schemaId}");
+                        }
+
+                        if (!string.IsNullOrEmpty(importBatchId))
+                        {
+                            // Add to the row data to ensure it gets into the payload
+                            rowData["import_batch_id"] = importBatchId;
+                            Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to row data: {importBatchId}");
+                        }
+
+                        // Log the row data for debugging
+                        Console.WriteLine($"TabularExcelDecoder: Row data contains {rowData.Count} fields, including schema_id: {rowData.ContainsKey("schema_id")}, import_batch_id: {rowData.ContainsKey("import_batch_id")}");
+
+                        // Create a chunk for this row
+                        chunkNumber++;
+                        var metadata = new Dictionary<string, string>
+                        {
+                            ["worksheetName"] = worksheetName,
+                            ["rowNumber"] = rowNumber.ToString(),
+                            ["_worksheet"] = worksheetName,  // Add with underscore prefix for source dictionary
+                            ["_rowNumber"] = rowNumber.ToString(),  // Add with underscore prefix for source dictionary
+                        };
+
+                        // Create a detailed text representation of the row data
+                        // This will be used for embedding/semantic search relevance AND for data extraction
+                        var textBuilder = new StringBuilder();
+                        textBuilder.Append($"Record from worksheet {worksheetName}, row {rowNumber}: ");
+
+                        // Add schema ID and import batch ID first if available
+                        if (!string.IsNullOrEmpty(schemaId))
+                        {
+                            textBuilder.Append($"schema_id is {schemaId}. ");
+                        }
+
+                        if (!string.IsNullOrEmpty(importBatchId))
+                        {
+                            textBuilder.Append($"import_batch_id is {importBatchId}. ");
+                        }
+
+                        // Add all row data as key-value pairs
+                        foreach (var kvp in rowData)
+                        {
+                            // Skip metadata fields that are already included above
+                            if (kvp.Key == "schema_id" || kvp.Key == "import_batch_id")
+                            {
+                                continue;
+                            }
+
+                            // Skip internal fields that start with underscore
+                            if (kvp.Key.StartsWith("_"))
+                            {
+                                continue;
+                            }
+
+                            // Format the value as a string
+                            string valueStr = kvp.Value?.ToString() ?? "NULL";
+
+                            // Add the key-value pair to the text
+                            textBuilder.Append($"{kvp.Key} is {valueStr}. ");
+                        }
+
+                        // Use the detailed text for the chunk
+                        var chunkText = textBuilder.ToString().TrimEnd();
+
+                        // Add dataset name if provided
+                        if (!string.IsNullOrEmpty(this._datasetName))
+                        {
+                            metadata["dataset_name"] = this._datasetName;
+                        }
+
+                        // Add schema ID and import batch ID to metadata as well
+                        // This is critical for ensuring these values are passed to the memory record
+                        if (!string.IsNullOrEmpty(schemaId))
+                        {
+                            metadata["schema_id"] = schemaId;
+                            Console.WriteLine($"TabularExcelDecoder: Adding schema ID to chunk metadata: {schemaId}");
+                        }
+
+                        if (!string.IsNullOrEmpty(importBatchId))
+                        {
+                            metadata["import_batch_id"] = importBatchId;
+                            Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to chunk metadata: {importBatchId}");
+                        }
+
+                        // Log the chunk text
+                        Console.WriteLine($"TabularExcelDecoder: Created chunk with text: {chunkText.Substring(0, Math.Min(100, chunkText.Length))}...");
+
+                        // Create the chunk with text, number, and metadata
+                        var chunk = new Chunk(chunkText, chunkNumber, metadata);
+                        result.Sections.Add(chunk);
+                        totalChunks++;
+                    }
+                    catch (Exception ex)
+                    {
+                        this._log.LogError(ex, "Error processing row {RowNumber} in worksheet {WorksheetName}. Skipping row.", row.RowNumber(), worksheetName);
                         continue;
                     }
-                    
-                    processedRows++;
-
-                    var rowNumber = row.RowNumber();
-                    var cells = row.Cells().ToList();
-
-                    // Create a dictionary to hold the row data
-                    var rowData = new Dictionary<string, object>();
-
-                    // Add metadata if configured
-                    if (this._config.IncludeWorksheetNames)
-                    {
-                        rowData["_worksheet"] = worksheetName;
-                    }
-
-                    if (this._config.IncludeRowNumbers)
-                    {
-                        rowData["_rowNumber"] = rowNumber;
-                    }
-
-                    // Process each cell in the row
-                    for (var i = 0; i < cells.Count; i++)
-                    {
-                        var cell = cells[i];
-
-                        // Skip hidden columns if configured
-                        if (this._config.SkipHiddenColumns && worksheet.Column(cell.Address.ColumnNumber).IsHidden)
-                        {
-                            continue;
-                        }
-
-                        // Get the column name (from headers or generate one)
-                        string columnName;
-                        if (this._config.UseFirstRowAsHeader && i < headers.Count)
-                        {
-                            columnName = headers[i];
-                        }
-                        else
-                        {
-                            columnName = $"{this._config.DefaultColumnPrefix}{cell.Address.ColumnNumber}";
-                        }
-
-                        // Extract the cell value based on its type
-                        object cellValue = this.ExtractCellValue(cell);
-
-                        // Add to row data
-                        rowData[columnName] = cellValue;
-                    }
-
-                    // Add schema ID and import batch ID if available - ensure they're in the payload
-                    if (!string.IsNullOrEmpty(schemaId))
-                    {
-                        // Add to the row data to ensure it gets into the payload
-                        rowData["schema_id"] = schemaId;
-                        Console.WriteLine($"TabularExcelDecoder: Adding schema ID to row data: {schemaId}");
-                    }
-                    
-                    if (!string.IsNullOrEmpty(importBatchId))
-                    {
-                        // Add to the row data to ensure it gets into the payload
-                        rowData["import_batch_id"] = importBatchId;
-                        Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to row data: {importBatchId}");
-                    }
-                    
-                    // Log the row data for debugging
-                    Console.WriteLine($"TabularExcelDecoder: Row data contains {rowData.Count} fields, including schema_id: {rowData.ContainsKey("schema_id")}, import_batch_id: {rowData.ContainsKey("import_batch_id")}");
-
-                    // Create a chunk for this row
-                    chunkNumber++;
-                    var metadata = new Dictionary<string, string>
-                    {
-                        ["worksheetName"] = worksheetName,
-                        ["rowNumber"] = rowNumber.ToString(),
-                        ["_worksheet"] = worksheetName,  // Add with underscore prefix for source dictionary
-                        ["_rowNumber"] = rowNumber.ToString(),  // Add with underscore prefix for source dictionary
-                    };
-
-                    // Create a detailed text representation of the row data
-                    // This will be used for embedding/semantic search relevance AND for data extraction
-                    var textBuilder = new StringBuilder();
-                    textBuilder.Append($"Record from worksheet {worksheetName}, row {rowNumber}: ");
-                    
-                    // Add schema ID and import batch ID first if available
-                    if (!string.IsNullOrEmpty(schemaId))
-                    {
-                        textBuilder.Append($"schema_id is {schemaId}. ");
-                    }
-                    
-                    if (!string.IsNullOrEmpty(importBatchId))
-                    {
-                        textBuilder.Append($"import_batch_id is {importBatchId}. ");
-                    }
-                    
-                    // Add all row data as key-value pairs
-                    foreach (var kvp in rowData)
-                    {
-                        // Skip metadata fields that are already included above
-                        if (kvp.Key == "schema_id" || kvp.Key == "import_batch_id")
-                        {
-                            continue;
-                        }
-                        
-                        // Skip internal fields that start with underscore
-                        if (kvp.Key.StartsWith("_"))
-                        {
-                            continue;
-                        }
-                        
-                        // Format the value as a string
-                        string valueStr = kvp.Value?.ToString() ?? "NULL";
-                        
-                        // Add the key-value pair to the text
-                        textBuilder.Append($"{kvp.Key} is {valueStr}. ");
-                    }
-                    
-                    // Use the detailed text for the chunk
-                    var chunkText = textBuilder.ToString().TrimEnd();
-
-                    // Add dataset name if provided
-                    if (!string.IsNullOrEmpty(this._datasetName))
-                    {
-                        metadata["dataset_name"] = this._datasetName;
-                    }
-                    
-                    // Add schema ID and import batch ID to metadata as well
-                    // This is critical for ensuring these values are passed to the memory record
-                    if (!string.IsNullOrEmpty(schemaId))
-                    {
-                        metadata["schema_id"] = schemaId;
-                        Console.WriteLine($"TabularExcelDecoder: Adding schema ID to chunk metadata: {schemaId}");
-                    }
-                    
-                    if (!string.IsNullOrEmpty(importBatchId))
-                    {
-                        metadata["import_batch_id"] = importBatchId;
-                        Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to chunk metadata: {importBatchId}");
-                    }
-
-                    // Log the chunk text
-                    Console.WriteLine($"TabularExcelDecoder: Created chunk with text: {chunkText.Substring(0, Math.Min(100, chunkText.Length))}...");
-                    
-                    // Create the chunk with text, number, and metadata
-                    var chunk = new Chunk(chunkText, chunkNumber, metadata);
-                    result.Sections.Add(chunk);
-                    totalChunks++;
                 }
             }
         } // End using workbook
