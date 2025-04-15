@@ -124,7 +124,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 if (schemaIdEnd > schemaIdStart)
                 {
                     schemaId = recordText.Substring(schemaIdStart, schemaIdEnd - schemaIdStart);
-                    Console.WriteLine($"UpsertAsync: Extracted schema ID={schemaId} from text");
+                    this._logger.LogDebug("UpsertAsync: Extracted schema ID={SchemaId} from text", schemaId);
                 }
             }
             
@@ -137,7 +137,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 if (importBatchIdEnd > importBatchIdStart)
                 {
                     importBatchId = recordText.Substring(importBatchIdStart, importBatchIdEnd - importBatchIdStart);
-                    Console.WriteLine($"UpsertAsync: Extracted import batch ID={importBatchId} from text");
+                    this._logger.LogDebug("UpsertAsync: Extracted import batch ID={ImportBatchId} from text", importBatchId);
                 }
             }
         }
@@ -149,7 +149,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
             !string.IsNullOrEmpty(schemaIdStr))
         {
             schemaId = schemaIdStr;
-            Console.WriteLine($"UpsertAsync: Found schema ID {schemaId} in record payload");
+            this._logger.LogDebug("UpsertAsync: Found schema ID {SchemaId} in record payload", schemaId);
         }
         
         if (string.IsNullOrEmpty(importBatchId) && 
@@ -158,7 +158,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
             !string.IsNullOrEmpty(importBatchIdStr))
         {
             importBatchId = importBatchIdStr;
-            Console.WriteLine($"UpsertAsync: Found import batch ID {importBatchId} in record payload");
+            this._logger.LogDebug("UpsertAsync: Found import batch ID {ImportBatchId} in record payload", importBatchId);
         }
 
         // Extract tabular data from the custom field
@@ -183,7 +183,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
     {
         // Handle string type
         schemaId = (string)schemaIdObj;
-        Console.WriteLine($"Extracted schema ID from tabular data: {schemaId}");
+        this._logger.LogDebug("Extracted schema ID from tabular data: {SchemaId}", schemaId);
     }
     else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(schemaIdType) && 
              schemaIdType != typeof(string)) // strings are IEnumerable<char> so we exclude them
@@ -195,14 +195,14 @@ internal sealed partial class AzureCosmosDbTabularMemory
         if (enumerator.MoveNext() && enumerator.Current != null)
         {
             schemaId = enumerator.Current.ToString()!;
-            Console.WriteLine($"Extracted schema ID from tabular data list: {schemaId}");
+            this._logger.LogDebug("Extracted schema ID from tabular data list: {SchemaId}", schemaId);
         }
     }
     else if (schemaIdObj != null)
     {
         // Handle any other type by converting to string
         schemaId = schemaIdObj.ToString();
-        Console.WriteLine($"Extracted and converted schema ID from tabular data: {schemaId}");
+        this._logger.LogDebug("Extracted and converted schema ID from tabular data: {SchemaId}", schemaId);
     }
                 }
                 
@@ -216,7 +216,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                     {
                         // Handle string type
                         importBatchId = (string)importBatchIdObj;
-                        Console.WriteLine($"Extracted import batch ID from tabular data: {importBatchId}");
+                        this._logger.LogDebug("Extracted import batch ID from tabular data: {ImportBatchId}", importBatchId);
                     } 
                     else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(importBatchIdType) && 
                              importBatchIdType != typeof(string)) // strings are IEnumerable<char> so we exclude them
@@ -228,14 +228,14 @@ internal sealed partial class AzureCosmosDbTabularMemory
                         if (enumerator.MoveNext() && enumerator.Current != null)
                         {
                             importBatchId = enumerator.Current.ToString()!;
-                            Console.WriteLine($"Extracted import batch ID from tabular data list: {importBatchId}");
+                            this._logger.LogDebug("Extracted import batch ID from tabular data list: {ImportBatchId}", importBatchId);
                         }
                     }
                     else if (importBatchIdObj != null)
                     {
                         // Handle any other type by converting to string
                         importBatchId = importBatchIdObj.ToString();
-                        Console.WriteLine($"Extracted and converted import batch ID from tabular data: {importBatchId}");
+                        this._logger.LogDebug("Extracted and converted import batch ID from tabular data: {ImportBatchId}", importBatchId);
                     }
                 }
             }
@@ -265,7 +265,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
         }
 
         // Log the schema ID and import batch ID before creating the record
-        Console.WriteLine($"UpsertAsync: About to create record with schemaId={schemaId}, importBatchId={importBatchId}");
+        this._logger.LogDebug("UpsertAsync: About to create record with schemaId={SchemaId}, importBatchId={ImportBatchId}", schemaId, importBatchId);
         
         // Create a source dictionary with worksheet and row information
         Dictionary<string, string> sourceInfo = new();
@@ -291,7 +291,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                         {
                             sourceInfo["_worksheet"] = worksheet;
                             sourceInfo["_rowNumber"] = rowNum.ToString();
-                            Console.WriteLine($"UpsertAsync: Extracted worksheet={worksheet}, rowNumber={rowNum} from text");
+                            this._logger.LogDebug("UpsertAsync: Extracted worksheet={Worksheet}, rowNumber={RowNum} from text", worksheet, rowNum);
                         }
                     }
                 }
@@ -302,13 +302,13 @@ internal sealed partial class AzureCosmosDbTabularMemory
         if (!sourceInfo.ContainsKey("_worksheet") && record.Payload.TryGetValue("worksheetName", out var worksheetNameObj) && worksheetNameObj is string worksheetName)
         {
             sourceInfo["_worksheet"] = worksheetName;
-            Console.WriteLine($"UpsertAsync: Extracted worksheet={worksheetName} from metadata");
+            this._logger.LogDebug("UpsertAsync: Extracted worksheet={Worksheet} from metadata", worksheetName);
         }
         
         if (!sourceInfo.ContainsKey("_rowNumber") && record.Payload.TryGetValue("rowNumber", out var rowNumberObj) && rowNumberObj is string rowNumber)
         {
             sourceInfo["_rowNumber"] = rowNumber;
-            Console.WriteLine($"UpsertAsync: Extracted rowNumber={rowNumber} from metadata");
+            this._logger.LogDebug("UpsertAsync: Extracted rowNumber={RowNumber} from metadata", rowNumber);
         }
         
         // Add schema ID and import batch ID to source info
@@ -335,18 +335,18 @@ internal sealed partial class AzureCosmosDbTabularMemory
         // we need to ensure they're properly set during initialization via FromMemoryRecord
         if (!string.IsNullOrEmpty(schemaId) && !memoryRecord.Payload.ContainsKey("schema_id"))
         {
-            Console.WriteLine($"UpsertAsync: Adding schema_id to payload: {schemaId}");
+            this._logger.LogDebug("UpsertAsync: Adding schema_id to payload: {SchemaId}", schemaId);
             memoryRecord.Payload["schema_id"] = schemaId;
         }
         
         if (!string.IsNullOrEmpty(importBatchId) && !memoryRecord.Payload.ContainsKey("import_batch_id"))
         {
-            Console.WriteLine($"UpsertAsync: Adding import_batch_id to payload: {importBatchId}");
+            this._logger.LogDebug("UpsertAsync: Adding import_batch_id to payload: {ImportBatchId}", importBatchId);
             memoryRecord.Payload["import_batch_id"] = importBatchId;
         }
         
         // Log the final state of the record before saving to the database
-        Console.WriteLine($"UpsertAsync: Final record state - SchemaId={memoryRecord.SchemaId}, ImportBatchId={memoryRecord.ImportBatchId}");
+        this._logger.LogDebug("UpsertAsync: Final record state - SchemaId={SchemaId}, ImportBatchId={ImportBatchId}", memoryRecord.SchemaId, memoryRecord.ImportBatchId);
 
         // Save the record to the database
         var result = await this._cosmosClient
@@ -357,7 +357,20 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 memoryRecord.GetPartitionKey(),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
                 
-        Console.WriteLine($"UpsertAsync: Record saved to database with ID {result.Resource.Id}");
+        this._logger.LogDebug("UpsertAsync: Record saved to database with ID {Id}", result.Resource.Id);
+
+        // Post-insert confirmation: query for the record by ID
+        var confirmedRecord = await this.GetByIdAsync(
+            index,
+            record.Id,
+            record.GetFileId(),
+            cancellationToken);
+
+        if (confirmedRecord == null)
+        {
+            this._logger.LogError("Failed to confirm existence of record with ID {Id} after insert.", record.Id);
+            // Optionally: retry logic or throw/alert can be added here
+        }
 
         return result.Resource.Id;
     }

@@ -287,6 +287,37 @@ internal sealed partial class AzureCosmosDbTabularMemory
     }
 
     /// <summary>
+    /// Gets a record by its unique ID and partition key.
+    /// </summary>
+    /// <param name="index">The container/index name.</param>
+    /// <param name="id">The record's original (decoded) ID.</param>
+    /// <param name="partitionKey">The partition key (File field).</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The record if found, or null.</returns>
+    public async Task<AzureCosmosDbTabularMemoryRecord?> GetByIdAsync(
+        string index,
+        string id,
+        string partitionKey,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var encodedId = AzureCosmosDbTabularMemoryRecord.EncodeId(id);
+            var response = await this._cosmosClient
+                .GetDatabase(this._databaseName)
+                .GetContainer(index)
+                .ReadItemAsync<AzureCosmosDbTabularMemoryRecord>(
+                    encodedId, new PartitionKey(partitionKey), cancellationToken: cancellationToken);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            this._logger.LogWarning("Record with ID {Id} not found in index {Index}", id, index);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Gets the filterable fields from the index.
     /// </summary>
     /// <param name="index">The index name.</param>
