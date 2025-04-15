@@ -59,6 +59,20 @@ The project is currently focused on implementing and testing the tabular data pr
   - Legacy reflection logic is now deprecated and only present for backward compatibility.
   - This change makes the system robust to future changes in Kernel Memory internals and improves maintainability.
 
+### Fuzzy Matching, AND/OR Query Logic, and Dynamic AI Prompting
+- **FuzzyMatch configuration is now fully supported and configurable via appsettings.json**:
+  - `CosmosDbSettings` now includes a `FuzzyMatch` property (with `Enabled`, `Operator`, etc.), bound from config.
+  - The fuzzy match operator (`LIKE` or `CONTAINS`) is passed from config to `KernelMemoryQueryProcessor`.
+  - The AI filter generation prompt is dynamically constructed to match the configured operator, with operator-specific instructions and examples.
+- **AND/OR logic in filters is robustly supported**:
+  - Multiple keys in the filter JSON are combined as AND conditions.
+  - Arrays for a key (e.g., `"project": ["phoenix", "austin"]`) are combined as OR conditions in the backend SQL.
+  - The AI agent is instructed to use arrays for OR and multiple keys for AND.
+- **Backend (AzureCosmosDbTabularMemory.Query.cs) supports both AND and OR logic**:
+  - Arrays in filters are translated to SQL OR conditions.
+  - All logic is case-insensitive and works for both LIKE and CONTAINS operators.
+- **Result**: The system is now highly flexible, maintainable, and can be reconfigured for different fuzzy matching strategies and query logic without code changes.
+
 ### TabularFilterHelper Improvements
 - **Completely redesigned TabularFilterHelper to use Reflection API** instead of dynamic typing
   - Fixed "Cannot use a collection of dynamic type in an asynchronous foreach" errors

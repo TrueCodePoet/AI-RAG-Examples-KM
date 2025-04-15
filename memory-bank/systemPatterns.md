@@ -38,10 +38,12 @@ flowchart TD
 
 ## Key Design Patterns
 
-### 1. Dependency Injection
+### 1. Dependency Injection & Configurable Fuzzy Matching
 - Configuration is loaded from appsettings.json and injected into components
 - Services like IKernelMemory, IMemoryDb, and Kernel are initialized with their dependencies
 - IMemoryDb is now provided directly to all consumers via DI, not reflection
+- FuzzyMatch settings (Enabled, Operator, etc.) are now part of CosmosDbSettings and fully configurable via appsettings.json
+- The fuzzy match operator (LIKE/CONTAINS) is passed to KernelMemoryQueryProcessor and used to dynamically adapt the AI prompt
 - This pattern promotes loose coupling, testability, and robustness to framework changes
 
 ### 2. Pipeline Pattern
@@ -171,10 +173,12 @@ flowchart TD
    - Provides comprehensive error messages for vector search failures with troubleshooting guidance
    - Uses field paths compatible with Cosmos DB's Vector Index requirements
 
-6. **Robust Memory DB Access**
+6. **Robust Memory DB Access & Flexible Query Logic**
    - IMemoryDb is now provided directly via DI, not reflection
    - Reflection-based access (`MemoryHelper`) is deprecated and only present for backward compatibility
    - All main workflow components (e.g., `KernelMemoryQueryProcessor`, `TabularFilterHelper`) receive IMemoryDb via constructor injection
+   - KernelMemoryQueryProcessor dynamically adapts the AI filter generation prompt based on the configured fuzzy match operator (LIKE/CONTAINS)
+   - The backend supports both AND (multiple keys) and OR (arrays for a key) logic in filters, translating them to SQL WHERE clauses
    - This approach is robust, maintainable, and future-proof
 
 6. **Modular Pipeline Architecture**

@@ -32,6 +32,10 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Basic error handling for query failures
 - ✅ Schema-based parameter validation
 - ✅ Result limiting for large result sets
+- ✅ Fully configurable fuzzy matching (LIKE/CONTAINS) via appsettings.json
+- ✅ Dynamic AI prompt adapts to fuzzy match operator
+- ✅ Robust AND/OR logic in filters (multiple keys = AND, arrays = OR)
+- ✅ Backend supports both AND and OR logic, translating to SQL WHERE clauses
 
 ### Configuration and Setup
 - ✅ Configuration loading from appsettings.json
@@ -47,6 +51,11 @@ The project is in a functional prototype stage, with core components implemented
   - **Impact:** Broke with certain implementations, caused errors like "Could not find _memoryDb field in memory object", and made the system brittle to framework changes.
   - **Lesson:** Avoid reflection-based hacks for core service resolution. Prefer explicit Dependency Injection (DI) for all critical dependencies.
   - **Status:** Fully replaced by DI-based approach. Do NOT retry reflection-based access for memory components.
+
+### Prompt/Query Logic Must Match Backend Capabilities
+- ❌ Hardcoding fuzzy match logic or prompt instructions leads to mismatches and confusion.
+  - **Lesson:** Always read operator/config from appsettings.json and dynamically adapt the AI prompt and backend logic.
+  - **Status:** Now fully dynamic and robust; prompt and backend always match config.
 
 ## What's Left to Build
 
