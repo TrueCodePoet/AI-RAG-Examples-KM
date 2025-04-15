@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿using Microsoft.KernelMemory;
+﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -86,7 +86,8 @@ var tabularQueryProcessor = new KernelMemoryQueryProcessor(
     kernel,
     TabularIndexName,
     appConfig.AzureOpenAITextConfig,
-    tabularMemoryDb); // Pass the memory DB directly to avoid reflection
+    tabularMemoryDb,
+    appConfig.CosmosDbTabularSettings.FuzzyMatch.Operator); // Pass the fuzzy match operator for prompt construction
 
 var standardQueryProcessor = new KernelMemoryQueryProcessor(
     standardMemory,

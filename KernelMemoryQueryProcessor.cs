@@ -19,20 +19,23 @@ public class KernelMemoryQueryProcessor
     private readonly AzureOpenAIConfig _azureOpenAITextConfig;
     private readonly IMemoryDb? _tabularMemoryDb;
     private readonly bool _skipDatasetIdentification;
+    private readonly string _fuzzyMatchOperator;
 
     public KernelMemoryQueryProcessor(
         IKernelMemory memory,
         Kernel kernel,
         string indexName,
         AzureOpenAIConfig azureOpenAITextConfig,
-        IMemoryDb? tabularMemoryDb = null)
+        IMemoryDb? tabularMemoryDb = null,
+        string fuzzyMatchOperator = "CONTAINS")
     {
         _memory = memory;
         _kernel = kernel;
         _indexName = indexName;
         _azureOpenAITextConfig = azureOpenAITextConfig;
         _tabularMemoryDb = tabularMemoryDb;
-        
+        _fuzzyMatchOperator = fuzzyMatchOperator;
+
         // If we don't have a valid tabularMemoryDb instance, we'll skip the dataset identification step
         _skipDatasetIdentification = _tabularMemoryDb == null;
         if (_skipDatasetIdentification)
@@ -245,9 +248,16 @@ Dataset:";
             // --- Filter Generation Step ---
             Console.WriteLine("--- Generating Filters ---");
 
-            // Updated prompt template to include schema info
-            string filterPromptTemplate = @"
+            // Updated prompt template to include schema info and operator-specific instructions
+            string filterPromptTemplate;
+            if (_fuzzyMatchOperator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+            {
+                filterPromptTemplate = @"
         Analyze the user's question to identify specific criteria that can be used to filter tabular data or apply tags, based ONLY on the provided schema fields.
+
+        IMPORTANT: For string fields, generate partial (fuzzy) values that will be used with a SQL LIKE operator for matching. Use the '%' character as a wildcard at the start, end, or within values (e.g., '%corelight%', 'phoenix%', '%sensor'). You may generate multiple patterns if appropriate. Matching is case-insensitive.
+
+        For AND logic, include multiple keys in the JSON object (all must match). For OR logic, use an array of values for a key (any value may match).
 
         Available Schema Fields (use these exact keys):
         {{$schemaInfo}}
@@ -256,22 +266,23 @@ Dataset:";
         1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
         2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
         3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
-        4. Extract the specific value mentioned for the criterion.
-        5. Format the output STRICTLY as a JSON object containing the identified key-value pairs.
-        6. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
+        4. Extract the specific value mentioned for the criterion. For string fields, use a substring or keyword (not the full value) for fuzzy search, and use '%' as a wildcard.
+        5. For OR logic, use an array of patterns for a key: { ""data.server_purpose"": [""%corelight%"", ""%sensor%""] }
+        6. Format the output STRICTLY as a JSON object containing the identified key-value pairs.
+        7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
 
         FORMAT:
         DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
 
         EXAMPLES:
         Question: Show me production servers.
-        Output: {""data.environment"": ""Production""}
+        Output: {""data.environment"": ""%product%""}
 
-        Question: List all servers for the 'Phoenix' project.
-        Output: {""project"": ""Phoenix""}
+        Question: List all servers for the 'Phoenix' or 'Austin' project.
+        Output: {""project"": [""phoenix%"", ""austin%""]}
 
         Question: What is the server purpose for VAXVNAGG01?
-        Output: {""data.server_name"": ""VAXVNAGG01""}
+        Output: {""data.server_name"": ""%vaxv%""}
 
         Question: Tell me about the system architecture.
         Output: {}
@@ -279,6 +290,48 @@ Dataset:";
         Question: {{$input}}
         Output:
         ";
+            }
+            else // CONTAINS or other substring operator
+            {
+                filterPromptTemplate = @"
+        Analyze the user's question to identify specific criteria that can be used to filter tabular data or apply tags, based ONLY on the provided schema fields.
+
+        IMPORTANT: For string fields, generate partial (fuzzy) values that will be used with a CONTAINS operator for matching. Use a substring or keyword that is likely to appear in the relevant field. Matching is case-insensitive.
+
+        For AND logic, include multiple keys in the JSON object (all must match). For OR logic, use an array of values for a key (any value may match).
+
+        Available Schema Fields (use these exact keys):
+        {{$schemaInfo}}
+
+        RULES FOR OUTPUT KEYS:
+        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
+        2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
+        3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
+        4. Extract the specific value mentioned for the criterion. For string fields, use a substring or keyword (not the full value) for fuzzy search.
+        5. For OR logic, use an array of patterns for a key: { ""data.server_purpose"": [""corelight"", ""sensor""] }
+        6. Format the output STRICTLY as a JSON object containing the identified key-value pairs.
+        7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
+
+        FORMAT:
+        DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
+
+        EXAMPLES:
+        Question: Show me production servers.
+        Output: {""data.environment"": ""product""}
+
+        Question: List all servers for the 'Phoenix' or 'Austin' project.
+        Output: {""project"": [""phoenix"", ""austin""]}
+
+        Question: What is the server purpose for VAXVNAGG01?
+        Output: {""data.server_name"": ""vaxv""}
+
+        Question: Tell me about the system architecture.
+        Output: {}
+
+        Question: {{$input}}
+        Output:
+        ";
+            }
 
             var generateFiltersFunction = _kernel.CreateFunctionFromPrompt(
                 filterPromptTemplate, functionName: "GenerateNormalizedFilters",
@@ -473,7 +526,12 @@ Dataset:";
             Console.WriteLine("\n--- Synthesizing Final Answer ---");
             var skPrompt = $@"
         Question to Kernel Memory: {question}
-         
+
+        Kernel Memory Documents:
+            Start Documents -----------
+            {allRawResults}
+            End Documents -----------
+
         Kernel Memory Answer: {answer.Result}
          
         Kernel Memory Sources:

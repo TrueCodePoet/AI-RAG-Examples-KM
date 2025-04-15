@@ -16,6 +16,17 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
         public string Endpoint { get; set; } = string.Empty;
         public string APIKey { get; set; } = string.Empty;
         public string DatabaseName { get; set; } = "memory"; // Default value
+
+        // FuzzyMatch config for tabular memory
+        public FuzzyMatchSettings FuzzyMatch { get; set; } = new FuzzyMatchSettings();
+    }
+
+    public class FuzzyMatchSettings
+    {
+        public bool Enabled { get; set; } = false;
+        public bool CaseInsensitive { get; set; } = true;
+        public int MinimumLength { get; set; } = 2;
+        public string Operator { get; set; } = "CONTAINS";
     }
 
     // Configuration class for Blob Storage
