@@ -399,6 +399,32 @@ Dataset:";
             
             Console.WriteLine($"Search returned {searchResults.Results.Count} results");
             
+            // --- Format all raw search results for prompt injection ---
+            string allRawResults = "";
+            foreach (var doc in searchResults.Results)
+            {
+                string sourceName = doc.SourceName;
+                string docId = doc.DocumentId ?? "N/A";
+                string lastUpdate = doc.Partitions.FirstOrDefault()?.LastUpdate.ToString("d") ?? "N/A";
+                string link = doc.Link ?? "";
+                // Try to include the actual record data (Text or ToString fallback)
+                string recordData = "";
+                // Try Text property (common for citation/search result objects)
+                var textProp = doc.GetType().GetProperty("Text");
+                if (textProp != null)
+                {
+                    var textValue = textProp.GetValue(doc) as string;
+                    if (!string.IsNullOrEmpty(textValue))
+                        recordData = textValue;
+                }
+                // Fallback: use ToString()
+                if (string.IsNullOrEmpty(recordData))
+                {
+                    recordData = doc.ToString();
+                }
+                allRawResults += $"  - {sourceName} (ID: {docId}) Link: {link} [LastUpdate: {lastUpdate}]\n    Record Data: {recordData}\n";
+            }
+            
             Console.WriteLine("--- First query was for raw search data. Now executing AskAsync for answer synthesis. ---");
             
             // Investigation: The two queries with different limits come from:
