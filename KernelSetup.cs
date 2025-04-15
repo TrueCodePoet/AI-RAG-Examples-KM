@@ -92,16 +92,16 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
         /// <param name="indexName">The index name to use</param>
         /// <returns>Configured IKernelMemory instance</returns>
 
-        public static IKernelMemory InitializeMemory(
-            AzureOpenAIConfig textConfig, 
-            AzureOpenAIConfig embeddingConfig, 
+        public static (IKernelMemory Memory, IMemoryDb? MemoryDb) InitializeMemory(
+            AzureOpenAIConfig textConfig,
+            AzureOpenAIConfig embeddingConfig,
             CosmosDbSettings cosmosTabularConfig,
             CosmosDbSettings cosmosStandardConfig,
             bool useTabularPipeline,
             string indexName)
         {
             Console.WriteLine($"Initializing {(useTabularPipeline ? "tabular" : "standard")} memory pipeline for index: {indexName}");
-            
+
             var builder = new KernelMemoryBuilder()
                 .WithAzureOpenAITextGeneration(textConfig)
                 .WithAzureOpenAITextEmbeddingGeneration(embeddingConfig)
@@ -149,7 +149,7 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
             memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.GenerateEmbeddingsHandler>("generate_embeddings");
             memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SummarizationHandler>("summarize_data");
             memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SaveRecordsHandler>("save_current_records");
-            
+
             // Only add TextPartitioningHandler for standard pipeline
             if (!useTabularPipeline)
             {
@@ -161,7 +161,36 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
                 Console.WriteLine("* Skipping TextPartitioningHandler for tabular pipeline");
             }
 
-            return memory;
+            // Extract the IMemoryDb instance using reflection (temporary, until DI is fully supported)
+            IMemoryDb? memoryDb = null;
+            try
+            {
+                var memoryType = memory.GetType();
+                var memoryDbField = memoryType.GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (memoryDbField != null)
+                {
+                    var dbValue = memoryDbField.GetValue(memory);
+                    if (dbValue is IMemoryDb dbInstance)
+                    {
+                        memoryDb = dbInstance;
+                        Console.WriteLine($"Successfully extracted IMemoryDb of type: {memoryDb.GetType().FullName}");
+                    }
+                    else
+                    {
+                        Console.WriteLine("WARNING: _memoryDb field exists but is not IMemoryDb");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("WARNING: Could not find _memoryDb field in MemoryServerless instance");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR extracting IMemoryDb: {ex.Message}");
+            }
+
+            return (memory, memoryDb);
         }
     }
 }

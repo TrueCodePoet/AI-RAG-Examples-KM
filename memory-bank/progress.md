@@ -32,13 +32,21 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Basic error handling for query failures
 - ✅ Schema-based parameter validation
 - ✅ Result limiting for large result sets
-- ✅ Reflection-based access to memory components
 
 ### Configuration and Setup
 - ✅ Configuration loading from appsettings.json
 - ✅ Azure service integration (OpenAI, Cosmos DB, Blob Storage)
 - ✅ Dependency injection for components
 - ✅ Pipeline configuration and customization
+
+## What Didn't Work / Lessons Learned
+
+### Reflection-based IMemoryDb Access (Deprecated)
+- ❌ Reflection-based access to memory components (e.g., using `MemoryHelper.GetMemoryDbFromKernelMemory`) was unreliable and fragile.
+  - **Why it failed:** This approach depended on private/internal field names and implementation details of `IKernelMemory` (e.g., `_memoryDb`), which are not guaranteed to be present or stable across versions or implementations (e.g., `MemoryServerless`).
+  - **Impact:** Broke with certain implementations, caused errors like "Could not find _memoryDb field in memory object", and made the system brittle to framework changes.
+  - **Lesson:** Avoid reflection-based hacks for core service resolution. Prefer explicit Dependency Injection (DI) for all critical dependencies.
+  - **Status:** Fully replaced by DI-based approach. Do NOT retry reflection-based access for memory components.
 
 ## What's Left to Build
 

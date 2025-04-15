@@ -51,6 +51,14 @@ The project is currently focused on implementing and testing the tabular data pr
   - Implemented logic to limit displayed sources while still using all sources for the answer
   - Modified Program.cs to use a result limit of 10 for tabular queries
 
+### Dependency Injection for MemoryDb (Major Refactor)
+- **Replaced reflection-based IMemoryDb access with DI-based approach**:
+  - `KernelInitializer.InitializeMemory` now returns both `IKernelMemory` and `IMemoryDb` directly.
+  - `Program.cs` and all consumers now receive the `IMemoryDb` instance via DI, not reflection.
+  - Removed all usage of `MemoryHelper.GetMemoryDbFromKernelMemory` from the main workflow.
+  - Legacy reflection logic is now deprecated and only present for backward compatibility.
+  - This change makes the system robust to future changes in Kernel Memory internals and improves maintainability.
+
 ### TabularFilterHelper Improvements
 - **Completely redesigned TabularFilterHelper to use Reflection API** instead of dynamic typing
   - Fixed "Cannot use a collection of dynamic type in an asynchronous foreach" errors
@@ -62,7 +70,7 @@ The project is currently focused on implementing and testing the tabular data pr
 ## Next Steps
 
 ### Short-term Tasks
-1. **Refactor Memory Initialization**: Modify `KernelInitializer.InitializeMemory` to use DI to resolve the `IMemoryDb` instance and return it alongside `IKernelMemory`. Update `Program.cs` to use this resolved instance and remove the `MemoryHelper` reflection logic.
+- **(Done)** Refactor Memory Initialization: `KernelInitializer.InitializeMemory` now uses DI to resolve the `IMemoryDb` instance and returns it alongside `IKernelMemory`. `Program.cs` uses this resolved instance and no longer uses the `MemoryHelper` reflection logic.
 2. **Testing with Larger Datasets**: Test the system with larger Excel files to evaluate performance and accuracy
 3. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries
 4. **Error Handling**: Continue improving error handling for edge cases in Excel processing
@@ -91,7 +99,7 @@ The project is currently focused on implementing and testing the tabular data pr
 5. **Text Field Parsing**: Implemented a robust approach to extract all data (metadata and row data) from the text field using a combination of regex for the prefix and manual string splitting/parsing for the data section.
 6. **Partial Class Organization**: Used C# partial classes to organize the large AzureCosmosDbTabularMemory implementation into logical groupings while maintaining a single cohesive class.
 7. **Filename Priority for Schema Generation**: Modified the `ExtractSchemaFromWorkbook` method to prioritize the provided file path over workbook metadata (Title property) when determining the source file name.
-8. **Dependency Injection for Service Resolution**: Decided against using reflection (`MemoryHelper`) to access internal `IKernelMemory` components as it proved unreliable with `MemoryServerless`. Will refactor to use the standard Dependency Injection pattern (`IServiceProvider.GetRequiredService<IMemoryDb>`) during initialization to retrieve necessary service instances like `IMemoryDb`.
+8. **Dependency Injection for Service Resolution**: Now using DI to provide `IMemoryDb` directly to all consumers. Reflection-based access (`MemoryHelper`) is deprecated and only present for backward compatibility. This makes the system robust to changes in Kernel Memory internals and improves maintainability.
 9. **Result Limiting Approach**: Implemented result limiting post-query to allow the LLM to still have access to all information while controlling what's displayed to the user.
 
 ### Open Questions

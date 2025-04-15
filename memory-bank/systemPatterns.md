@@ -40,8 +40,9 @@ flowchart TD
 
 ### 1. Dependency Injection
 - Configuration is loaded from appsettings.json and injected into components
-- Services like IKernelMemory and Kernel are initialized with their dependencies
-- This pattern promotes loose coupling and testability
+- Services like IKernelMemory, IMemoryDb, and Kernel are initialized with their dependencies
+- IMemoryDb is now provided directly to all consumers via DI, not reflection
+- This pattern promotes loose coupling, testability, and robustness to framework changes
 
 ### 2. Pipeline Pattern
 - Document processing follows a sequential pipeline of handlers
@@ -147,10 +148,10 @@ flowchart TD
    - Supports efficient vector search for embeddings
    - Allows for structured queries on tabular data
 
-2. **Runtime Dependency Injection**
-   - Uses reflection in `Program.cs` (`MemoryHelper`) to inject the `IMemoryDb` instance into `TabularExcelDecoder` at runtime
-   - Enables the decoder to save schema information despite being instantiated early in the pipeline
-   - Works around limitations in the Kernel Memory framework's pipeline configuration
+2. **MemoryDb Service Resolution via Dependency Injection**
+   - IMemoryDb is now provided directly by `KernelInitializer.InitializeMemory` and passed to all consumers (e.g., `KernelMemoryQueryProcessor`, `TabularFilterHelper`) via DI
+   - No longer uses reflection or `MemoryHelper` to extract IMemoryDb from IKernelMemory
+   - This change eliminates fragility and makes the system robust to changes in Kernel Memory internals
    - Promotes interface-based design by working with `IMemoryDb` rather than concrete implementations
 
 3. **Custom Excel Processing**
@@ -171,11 +172,10 @@ flowchart TD
    - Uses field paths compatible with Cosmos DB's Vector Index requirements
 
 6. **Robust Memory DB Access**
-   - Created dedicated `MemoryHelper` class to centralize reflection-based access code
-   - Improved diagnostic logging with detailed information during memory DB access attempts
-   - Added multi-level fallback strategies for discovering the memory DB in different implementations
-   - Designed for an eventual transition to Dependency Injection in future versions
-   - Clear separation between the reflection-based approach (current) and the planned DI-based approach
+   - IMemoryDb is now provided directly via DI, not reflection
+   - Reflection-based access (`MemoryHelper`) is deprecated and only present for backward compatibility
+   - All main workflow components (e.g., `KernelMemoryQueryProcessor`, `TabularFilterHelper`) receive IMemoryDb via constructor injection
+   - This approach is robust, maintainable, and future-proof
 
 6. **Modular Pipeline Architecture**
    - Allows for customization of processing steps

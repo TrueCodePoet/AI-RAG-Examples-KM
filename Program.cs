@@ -1,4 +1,4 @@
-﻿﻿﻿﻿using Microsoft.KernelMemory;
+﻿﻿﻿﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -24,29 +24,27 @@ var appConfig = KernelInitializer.LoadConfiguration();
 // Initialize Kernel for both pipelines to share
 var kernel = KernelInitializer.InitializeKernel(appConfig.AzureOpenAITextConfig);
 
+
 // Initialize both memory pipelines
 Console.WriteLine("Initializing dual memory pipelines...");
 
 // 1. Tabular Memory Pipeline
-var tabularMemory = KernelInitializer.InitializeMemory(
-    appConfig.AzureOpenAITextConfig, 
-    appConfig.AzureOpenAIEmbeddingConfig, 
+var (tabularMemory, tabularMemoryDb) = KernelInitializer.InitializeMemory(
+    appConfig.AzureOpenAITextConfig,
+    appConfig.AzureOpenAIEmbeddingConfig,
     appConfig.CosmosDbTabularSettings,
     appConfig.CosmosDbStandardSettings,
     useTabularPipeline: true,
     TabularIndexName);
 
 // 2. Standard Memory Pipeline
-var standardMemory = KernelInitializer.InitializeMemory(
-    appConfig.AzureOpenAITextConfig, 
-    appConfig.AzureOpenAIEmbeddingConfig, 
+var (standardMemory, standardMemoryDb) = KernelInitializer.InitializeMemory(
+    appConfig.AzureOpenAITextConfig,
+    appConfig.AzureOpenAIEmbeddingConfig,
     appConfig.CosmosDbTabularSettings,
     appConfig.CosmosDbStandardSettings,
     useTabularPipeline: false,
     StandardIndexName);
-
-// Set up TabularExcelDecoder for the tabular pipeline
-var tabularMemoryDb = MemoryHelper.GetMemoryDbFromKernelMemory(tabularMemory);
 
 // Detailed verification of tabularMemoryDb before using it
 Console.WriteLine("\n=== VERIFICATION OF tabularMemoryDb INSTANCE ===");
@@ -55,19 +53,13 @@ if (tabularMemoryDb != null)
     Console.WriteLine($"• tabularMemoryDb Type: {tabularMemoryDb.GetType().FullName}");
     Console.WriteLine($"• Is AzureCosmosDbTabularMemory: {tabularMemoryDb.GetType().FullName?.Contains("AzureCosmosDbTabularMemory") == true}");
     Console.WriteLine($"• Implements IMemoryDb: {tabularMemoryDb is IMemoryDb}");
-    
-    // Try to cast to confirm if it's actually AzureCosmosDbTabularMemory
     var isAzureCosmosDbTabularMemory = tabularMemoryDb is AzureCosmosDbTabularMemory;
     Console.WriteLine($"• Direct cast to AzureCosmosDbTabularMemory: {isAzureCosmosDbTabularMemory}");
-    
-    // Check if type name contains substring in a case-insensitive way
     var containsTabularIgnoreCase = tabularMemoryDb.GetType().FullName?.IndexOf("TabularMemory", StringComparison.OrdinalIgnoreCase) >= 0;
     Console.WriteLine($"• Name contains 'TabularMemory' (case insensitive): {containsTabularIgnoreCase}");
-    
     Console.WriteLine("Successfully obtained IMemoryDb instance for tabular pipeline");
-    
-    // Find and update TabularExcelDecoder instances in the pipeline
-    MemoryHelper.SetMemoryOnTabularExcelDecoders(tabularMemory, tabularMemoryDb);
+    // If you still need to update TabularExcelDecoder instances, do so here (optional)
+    // MemoryHelper.SetMemoryOnTabularExcelDecoders(tabularMemory, tabularMemoryDb);
 }
 else
 {
@@ -77,15 +69,15 @@ Console.WriteLine("=== END VERIFICATION ===\n");
 
 // Create BlobStorageProcessor instances for each pipeline
 var tabularFileProcessor = new BlobStorageProcessor(
-    tabularMemory, 
-    appConfig.BlobStorageSettings, 
-    TabularIndexName, 
+    tabularMemory,
+    appConfig.BlobStorageSettings,
+    TabularIndexName,
     LocalDownloadPath);
 
 var standardFileProcessor = new BlobStorageProcessor(
-    standardMemory, 
-    appConfig.BlobStorageSettings, 
-    StandardIndexName, 
+    standardMemory,
+    appConfig.BlobStorageSettings,
+    StandardIndexName,
     LocalDownloadPath);
 
 // Create query processors for both pipelines
