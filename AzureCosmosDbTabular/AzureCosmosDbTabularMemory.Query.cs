@@ -153,8 +153,9 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                 string paramName = $"@p_{parameters.Count}";
                                 string itemValue = item.ToString();
                                 string paramValue = itemValue;
-                                bool useFuzzyMatch = this._config.FuzzyMatch.Enabled && itemValue.Length >= this._config.FuzzyMatch.MinimumLength;
-                                if (useFuzzyMatch && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+                                // Always use LIKE if fuzzy match operator is LIKE, regardless of value length
+                                bool useLike = this._config.FuzzyMatch.Enabled && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase);
+                                if (useLike)
                                 {
                                     paramValue = "%" + itemValue.Replace(" ", "%") + "%";
                                 }
@@ -169,7 +170,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     innerBuilder.Append(" OR ");
                                 }
 
-                                if (useFuzzyMatch && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+                                if (useLike)
                                 {
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
@@ -179,8 +180,9 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     {
                                         innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}");
                                     }
+                                    this._logger.LogDebug("Using LIKE pattern matching for field {FieldName} (array value) with value {OriginalValue}", fieldName, itemValue);
                                 }
-                                else if (useFuzzyMatch)
+                                else if (this._config.FuzzyMatch.Enabled)
                                 {
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
@@ -190,6 +192,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     {
                                         innerBuilder.Append($"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})");
                                     }
+                                    this._logger.LogDebug("Using CONTAINS fuzzy matching for field {FieldName} (array value) with value {OriginalValue}", fieldName, itemValue);
                                 }
                                 else
                                 {
@@ -201,6 +204,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     {
                                         innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}");
                                     }
+                                    this._logger.LogDebug("Using exact matching for field {FieldName} (array value) with value {OriginalValue}", fieldName, itemValue);
                                 }
                                 firstValue = false;
                             }
