@@ -172,13 +172,43 @@ public static class DependencyInjection
         // Register the CSV decoder factory
         builder.Services.AddSingleton<IContentDecoder>(serviceProvider =>
         {
+            // Get logger for diagnostic information
             var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+            var logger = loggerFactory?.CreateLogger("TabularCsvDecoderRegistration");
+            
+            // First try to get the concrete type directly
             var memory = serviceProvider.GetService<AzureCosmosDbTabularMemory>();
+            
+            // If not found, try to get via interface and cast
             if (memory == null)
             {
                 var memoryDb = serviceProvider.GetService<IMemoryDb>();
                 memory = memoryDb as AzureCosmosDbTabularMemory;
+                
+                if (memory == null)
+                {
+                    logger?.LogWarning(
+                        "Failed to get AzureCosmosDbTabularMemory instance for CSV decoder. Schema extraction will be disabled. " +
+                        "IMemoryDb implementation: {MemoryDbType}", 
+                        memoryDb?.GetType().FullName ?? "null");
+                    Console.WriteLine("CSV decoder: Memory instance is null! Schema extraction will be disabled.");
+                }
+                else
+                {
+                    logger?.LogInformation(
+                        "Successfully obtained AzureCosmosDbTabularMemory instance for CSV decoder via IMemoryDb");
+                    Console.WriteLine($"CSV decoder: Successfully obtained memory instance of type {memory.GetType().FullName} via IMemoryDb");
+                }
             }
+            else
+            {
+                logger?.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance for CSV decoder directly");
+                Console.WriteLine($"CSV decoder: Successfully obtained memory instance of type {memory.GetType().FullName} directly");
+            }
+            
+            Console.WriteLine($"CSV decoder: Creating with dataset name: {datasetName}");
+            
+            // Create the CSV decoder with the memory instance
             return TabularCsvDecoder.CreateWithDatasetName(config, datasetName, memory, loggerFactory);
         });
 

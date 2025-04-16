@@ -97,7 +97,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         return mimeType != null && (
             mimeType.Equals("text/csv", StringComparison.OrdinalIgnoreCase) ||
             mimeType.Equals("application/csv", StringComparison.OrdinalIgnoreCase) ||
-            mimeType.Equals("text/plain", StringComparison.OrdinalIgnoreCase) || // Sometimes CSVs are uploaded as plain text
+            //mimeType.Equals("text/plain", StringComparison.OrdinalIgnoreCase) || // Sometimes CSVs are uploaded as plain text
             (MimeTypes.CSVData != null && mimeType.StartsWith(MimeTypes.CSVData, StringComparison.OrdinalIgnoreCase))
         );
     }
@@ -215,16 +215,20 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                         indexName = ctxIndexName;
                         this._log.LogDebug("Using index name '{IndexName}' from context for schema storage", indexName);
                     }
+                    Console.WriteLine($"TabularCsvDecoder: Storing schema with ID={schema.Id} to database index: {indexName ?? "default"}, " +
+                                     $"Dataset: {this._datasetName}, File: {schema.File}");
                     var storedSchemaId = await this._memory.StoreSchemaAsync(schema, indexName, cancellationToken).ConfigureAwait(false);
                     if (!string.IsNullOrEmpty(storedSchemaId))
                     {
                         schemaId = storedSchemaId;
                         importBatchId = schema.ImportBatchId;
+                        Console.WriteLine($"TabularCsvDecoder: Schema storage SUCCESS! ID={schemaId}, ImportBatchId={importBatchId}");
                         this._log.LogInformation("Stored schema with ID {SchemaId} and import batch ID {ImportBatchId} for dataset {DatasetName}",
                             schemaId, importBatchId, this._datasetName);
                     }
                     else
                     {
+                        Console.WriteLine($"TabularCsvDecoder: Schema storage FAILED! StoreSchemaAsync returned null or empty schemaId.");
                         this._log.LogWarning("TabularCsvDecoder: StoreSchemaAsync returned null or empty schemaId.");
                     }
                 }
@@ -329,16 +333,27 @@ internal sealed class TabularCsvDecoder : IContentDecoder
     // Schema extraction for CSV
     private TabularDataSchema ExtractSchemaFromCsv(List<string> headers, List<Dictionary<string, object>> rows, string datasetName, string csvFileName)
     {
+        // Generate a timestamp-based unique ID similar to Excel decoder
+        string timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        string sourceFileName = Path.GetFileNameWithoutExtension(csvFileName);
+        string uniqueId = $"schema_{sourceFileName}_{timestamp}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+        
+        Console.WriteLine($"Creating schema for CSV dataset {datasetName} with source file {csvFileName}, ID: {uniqueId}");
+
         var schema = new TabularDataSchema
         {
+            Id = uniqueId,
             DatasetName = datasetName,
             ImportDate = DateTime.UtcNow,
             SourceFile = csvFileName,
-            File = csvFileName,
+            File = csvFileName, // Set File property to source file name for proper partition key
             Columns = new List<SchemaColumn>(),
-            Metadata = new Dictionary<string, string>()
+            Metadata = new Dictionary<string, string>(),
+            ImportBatchId = Guid.NewGuid().ToString()
         };
 
+        // Add schema columns from headers
+        Console.WriteLine($"Creating {headers.Count} schema columns for CSV file {csvFileName}");
         foreach (var header in headers)
         {
             string normalizedName = header;
@@ -358,12 +373,18 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                 CommonValues = commonValues
             };
             schema.Columns.Add(column);
+            Console.WriteLine($"Added column: {header}, type: {dataType}");
         }
 
         // Ensure document_type is set for schema recognition
         schema.Metadata["document_type"] = "schema";
-
-        this._log.LogInformation($"TabularCsvDecoder: Created schema with File='{schema.File}', DatasetName='{schema.DatasetName}', Columns={schema.Columns.Count}, Metadata keys: {string.Join(",", schema.Metadata.Keys)}");
+        
+        Console.WriteLine($"CSV Schema creation complete. ID={schema.Id}, File='{schema.File}', DatasetName='{schema.DatasetName}', " +
+                         $"Columns={schema.Columns.Count}, ImportBatchId={schema.ImportBatchId}");
+        
+        this._log.LogInformation($"TabularCsvDecoder: Created schema with ID={schema.Id}, File='{schema.File}', " +
+                               $"DatasetName='{schema.DatasetName}', Columns={schema.Columns.Count}, " +
+                               $"Metadata keys: {string.Join(",", schema.Metadata.Keys)}");
 
         return schema;
     }
