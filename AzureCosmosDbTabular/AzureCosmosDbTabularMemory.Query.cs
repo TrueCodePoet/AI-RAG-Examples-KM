@@ -170,41 +170,45 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                     innerBuilder.Append(" OR ");
                                 }
 
+                                string sqlCondition = "";
                                 if (useLike)
                                 {
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
-                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) LIKE {paramName}");
+                                        sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) LIKE {paramName}";
                                     }
                                     else
                                     {
-                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}");
+                                        sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}";
                                     }
-                                    this._logger.LogDebug("Using LIKE pattern matching for field {FieldName} (array value) with value {OriginalValue}", fieldName, itemValue);
+                                    innerBuilder.Append(sqlCondition);
+                                    this._logger.LogDebug("ARRAY/LIKE: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
                                 }
                                 else if (this._config.FuzzyMatch.Enabled)
                                 {
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
-                                        innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}), {paramName})");
+                                        sqlCondition = $"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}), {paramName})";
                                     }
                                     else
                                     {
-                                        innerBuilder.Append($"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})");
+                                        sqlCondition = $"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})";
                                     }
-                                    this._logger.LogDebug("Using CONTAINS fuzzy matching for field {FieldName} (array value) with value {OriginalValue}", fieldName, itemValue);
+                                    innerBuilder.Append(sqlCondition);
+                                    this._logger.LogDebug("ARRAY/CONTAINS: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
                                 }
                                 else
                                 {
                                     if (this._config.FuzzyMatch.CaseInsensitive)
                                     {
-                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}");
+                                        sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}";
                                     }
                                     else
                                     {
-                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}");
+                                        sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}";
                                     }
-                                    this._logger.LogDebug("Using exact matching for field {FieldName} (array value) with value {OriginalValue}", fieldName, itemValue);
+                                    innerBuilder.Append(sqlCondition);
+                                    this._logger.LogDebug("ARRAY/EXACT: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
                                 }
                                 firstValue = false;
                             }
