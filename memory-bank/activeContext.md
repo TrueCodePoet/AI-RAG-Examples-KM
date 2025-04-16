@@ -89,6 +89,7 @@ The project is currently focused on implementing and testing the tabular data pr
 
 ### Short-term Tasks
 - **(Done)** Refactor Memory Initialization: `KernelInitializer.InitializeMemory` now uses DI to resolve the `IMemoryDb` instance and returns it alongside `IKernelMemory`. `Program.cs` uses this resolved instance and no longer uses the `MemoryHelper` reflection logic.
+- **(Done)** Fix filter value type preservation for LIKE/CONTAINS/OR logic: Updated `TabularFilterHelper.GenerateValidatedFilterAsync` to preserve array values as `List<string>` (not stringified), and updated query logic in `AzureCosmosDbTabularMemory.Query.cs` to robustly handle all `IEnumerable` types for OR/array cases, applying LIKE/CONTAINS/exact as appropriate.
 2. **Testing with Larger Datasets**: Test the system with larger Excel **and CSV** files to evaluate performance and accuracy, **specifically checking for row skipping issues in CSVs**.
 3. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries.
 4. **Error Handling**: Continue improving error handling for edge cases in Excel and CSV processing.

@@ -610,7 +610,23 @@ public class TabularFilterHelper
         var filter = new MemoryFilter();
         foreach (var param in validatedParameters)
         {
-            filter.Add(param.Key, param.Value?.ToString() ?? string.Empty);
+            if (param.Value is string s)
+            {
+                filter.Add(param.Key, s);
+            }
+            else if (param.Value is IEnumerable<string> stringList)
+            {
+                filter.Add(param.Key, stringList.ToList());
+            }
+            else if (param.Value is IEnumerable<object> objList && !(param.Value is string))
+            {
+                var strList = objList.Select(x => x?.ToString() ?? string.Empty).ToList();
+                filter.Add(param.Key, strList);
+            }
+            else if (param.Value != null)
+            {
+                filter.Add(param.Key, param.Value.ToString() ?? string.Empty);
+            }
         }
 
         return (filter, warnings);

@@ -37,6 +37,7 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Dynamic AI prompt adapts to fuzzy match operator
 - ✅ Robust AND/OR logic in filters (multiple keys = AND, arrays = OR)
 - ✅ Backend supports both AND and OR logic, translating to SQL WHERE clauses
+- ✅ Filter value type preservation for LIKE/CONTAINS/OR logic: Arrays are now preserved as List<string> and handled robustly in query logic
 - ✅ Consistent Base64 encoding of record IDs
 
 ### Configuration and Setup
@@ -235,6 +236,7 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-16 | Fixed Base64 ID encoding issue | Completed |
 | 2025-04-16 | Added CSV row skipping diagnostics | Completed |
 | 2025-04-16 | End-to-end testing (Excel & CSV) | In Progress |
+| 2025-04-16 | Fixed filter value type preservation for LIKE/CONTAINS/OR logic (arrays as List<string>, robust query handling) | Completed |
 | 2025-04-18 | Performance optimization | Not Started |
 | 2025-04-25 | Documentation and examples | In Progress |
 
