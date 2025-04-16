@@ -67,7 +67,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 containerName = this._config.SchemaContainerName;
                 
                 // Ensure the container exists
-                await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
+                //await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -76,12 +76,18 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 containerName = indexes.Any() ? indexes.First() : "default";
                 
                 // Ensure the container exists
-                if (!indexes.Any())
-                {
-                    await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
-                }
+                //if (!indexes.Any())
+                //{
+                //    await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
+                //}
             }
             
+            // This will catch if index needs to be created
+            if (! await this.IndexExistsAsync(containerName,cancellationToken).ConfigureAwait(false)){
+                await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
+            }
+
+
             // Store schema in the determined container
             var result = await this._cosmosClient
                 .GetDatabase(this._databaseName)

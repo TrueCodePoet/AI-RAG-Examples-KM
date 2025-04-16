@@ -77,6 +77,27 @@ internal sealed partial class AzureCosmosDbTabularMemory
             index, this._databaseName, vectorFieldPath); // Log the correct path used
     }
 
+   // Checks if a container (index) exists in the database.
+    public async Task<bool> IndexExistsAsync(string containerName, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var database = this._cosmosClient.GetDatabase(this._databaseName);
+            var container = database.GetContainer(containerName);
+            var response = await container.ReadContainerAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return response.StatusCode == System.Net.HttpStatusCode.OK;
+        }
+        catch (Microsoft.Azure.Cosmos.CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "Error checking existence of container {ContainerName}", containerName);
+            throw;
+        }
+    }
+
     /// <inheritdoc/>
     public async Task<IEnumerable<string>> GetIndexesAsync(CancellationToken cancellationToken = default)
     {
