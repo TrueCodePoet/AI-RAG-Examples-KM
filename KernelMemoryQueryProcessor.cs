@@ -357,13 +357,46 @@ Dataset:";
 
                 if (!string.IsNullOrWhiteSpace(filterJson) && filterJson != "{}")
                 {
-                    // Deserialize directly, assuming keys are now correctly normalized by the LLM
-                    var filterDict = JsonSerializer.Deserialize<Dictionary<string, string>>(filterJson);
+                    // Deserialize as Dictionary<string, object> to handle both string and array values
+                    var filterDict = JsonSerializer.Deserialize<Dictionary<string, object>>(filterJson);
                     if (filterDict != null && filterDict.Count > 0)
                     {
-                        // Convert string values to object values for validation
-                        var paramDict = filterDict.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
-                        
+                        // Convert values to object or List<object> for validation
+                        var paramDict = new Dictionary<string, object>();
+                        foreach (var kvp in filterDict)
+                        {
+                            if (kvp.Value is JsonElement elem)
+                            {
+                                if (elem.ValueKind == JsonValueKind.String)
+                                {
+                                    paramDict[kvp.Key] = elem.GetString();
+                                }
+                                else if (elem.ValueKind == JsonValueKind.Array)
+                                {
+                                    var list = new List<string>();
+                                    foreach (var item in elem.EnumerateArray())
+                                    {
+                                        if (item.ValueKind == JsonValueKind.String)
+                                            list.Add(item.GetString());
+                                    }
+                                    paramDict[kvp.Key] = list;
+                                }
+                                // Optionally handle other types (numbers, bools) if needed
+                            }
+                            else if (kvp.Value is string s)
+                            {
+                                paramDict[kvp.Key] = s;
+                            }
+                            else if (kvp.Value is IEnumerable<object> objList)
+                            {
+                                paramDict[kvp.Key] = objList.ToList();
+                            }
+                            else
+                            {
+                                paramDict[kvp.Key] = kvp.Value;
+                            }
+                        }
+
                         // If we have a dataset name, validate parameters against schema
                         if (!string.IsNullOrEmpty(datasetName))
                         {
@@ -382,10 +415,10 @@ Dataset:";
                                 }
                                 var result = await filterHelper.GenerateValidatedFilterAsync(
                                     datasetName, paramDict);
-                                
+
                                 generatedFilter = result.Filter;
                                 warnings.AddRange(result.Warnings);
-                                
+
                                 if (result.Warnings.Count > 0)
                                 {
                                     Console.WriteLine("Validation warnings:");
@@ -398,14 +431,30 @@ Dataset:";
                             catch (Exception ex)
                             {
                                 Console.WriteLine($"Error during parameter validation: {ex.Message}");
-                                
+
                                 // Fall back to unvalidated filter
                                 generatedFilter = new MemoryFilter();
-                                foreach (var kvp in filterDict)
+                                foreach (var kvp in paramDict)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                                    if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
                                     {
-                                        generatedFilter.Add(kvp.Key, kvp.Value);
+                                        if (kvp.Value is string s)
+                                        {
+                                            generatedFilter.Add(kvp.Key, s);
+                                        }
+                                        else if (kvp.Value is List<string> slist)
+                                        {
+                                            generatedFilter.Add(kvp.Key, slist);
+                                        }
+                                        else if (kvp.Value is IEnumerable<object> objList)
+                                        {
+                                            var strList = objList.Select(x => x?.ToString() ?? "").ToList();
+                                            generatedFilter.Add(kvp.Key, strList);
+                                        }
+                                        else
+                                        {
+                                            generatedFilter.Add(kvp.Key, kvp.Value.ToString() ?? "");
+                                        }
                                     }
                                 }
                             }
@@ -414,15 +463,31 @@ Dataset:";
                         {
                             // No dataset identified, use unvalidated filter
                             generatedFilter = new MemoryFilter();
-                            foreach (var kvp in filterDict)
+                            foreach (var kvp in paramDict)
                             {
-                                if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                                if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
                                 {
-                                    generatedFilter.Add(kvp.Key, kvp.Value);
+                                    if (kvp.Value is string s)
+                                    {
+                                        generatedFilter.Add(kvp.Key, s);
+                                    }
+                                    else if (kvp.Value is List<string> slist)
+                                    {
+                                        generatedFilter.Add(kvp.Key, slist);
+                                    }
+                                    else if (kvp.Value is IEnumerable<object> objList)
+                                    {
+                                        var strList = objList.Select(x => x?.ToString() ?? "").ToList();
+                                        generatedFilter.Add(kvp.Key, strList);
+                                    }
+                                    else
+                                    {
+                                        generatedFilter.Add(kvp.Key, kvp.Value.ToString() ?? "");
+                                    }
                                 }
                             }
                         }
-                        
+
                         Console.WriteLine($"Applied Filter: {JsonSerializer.Serialize(generatedFilter)}"); // Debug output
                     }
                 }
