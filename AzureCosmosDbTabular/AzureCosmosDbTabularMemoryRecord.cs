@@ -359,8 +359,19 @@ internal class AzureCosmosDbTabularMemoryRecord
 
     private static string DecodeId(string encodedId)
     {
-        var bytes = Convert.FromBase64String(encodedId.Replace('_', '='));
-        return Encoding.UTF8.GetString(bytes);
+        try
+        {
+            var bytes = Convert.FromBase64String(encodedId.Replace('_', '='));
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch (FormatException ex)
+        {
+            // Log the error and the problematic ID. Using Console.Error for simplicity in this static method.
+            // A more robust solution might involve passing an ILogger instance.
+            Console.Error.WriteLine($"[ERROR] Failed to decode Base64 ID: '{encodedId}'. Exception: {ex.Message}");
+            // Return an empty string or a placeholder to avoid crashing the application.
+            return string.Empty; 
+        }
     }
 
     // Regular expression for extracting worksheet name and row number
