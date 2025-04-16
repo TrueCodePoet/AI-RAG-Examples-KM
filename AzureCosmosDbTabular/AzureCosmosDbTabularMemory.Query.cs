@@ -140,39 +140,82 @@ internal sealed partial class AzureCosmosDbTabularMemory
                         else if (typeof(System.Collections.IEnumerable).IsAssignableFrom(valueType) && 
                                  valueType != typeof(string)) // strings are IEnumerable<char> so we exclude them
                         {
-                            // For collection of string values - handle as OR condition with each valid item
-                            innerBuilder.Append("(");
-                            bool firstValue = true;
-                            
-                            // Handle any collection type
-                            var enumerable = (System.Collections.IEnumerable)valueObj;
-                            foreach (var item in enumerable)
+                        // For collection of string values - handle as OR condition with each valid item
+                        innerBuilder.Append("(");
+                        bool firstValue = true;
+                        
+                        // Handle any collection type
+                        var enumerable = (System.Collections.IEnumerable)valueObj;
+                        foreach (var item in enumerable)
+                        {
+                            if (item != null)
                             {
-                                if (item != null)
+                                string paramName = $"@p_{parameters.Count}";
+                                string itemValue = item.ToString();
+                                string paramValue = itemValue;
+                                bool useFuzzyMatch = this._config.FuzzyMatch.Enabled && itemValue.Length >= this._config.FuzzyMatch.MinimumLength;
+                                if (useFuzzyMatch && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    string paramName = $"@p_{parameters.Count}";
-                                    parameters.Add(Tuple.Create<string, object>(paramName, item.ToString().ToLowerInvariant()));
-                                    
-                                    if (!firstValue)
-                                    {
-                                        innerBuilder.Append(" OR ");
-                                    }
-                                    
-                                    innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}");
-                                    firstValue = false;
+                                    paramValue = "%" + itemValue.Replace(" ", "%") + "%";
                                 }
+                                if (this._config.FuzzyMatch.CaseInsensitive)
+                                {
+                                    paramValue = paramValue.ToLowerInvariant();
+                                }
+                                parameters.Add(Tuple.Create<string, object>(paramName, paramValue));
+
+                                if (!firstValue)
+                                {
+                                    innerBuilder.Append(" OR ");
+                                }
+
+                                if (useFuzzyMatch && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) LIKE {paramName}");
+                                    }
+                                    else
+                                    {
+                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}");
+                                    }
+                                }
+                                else if (useFuzzyMatch)
+                                {
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        innerBuilder.Append($"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}), {paramName})");
+                                    }
+                                    else
+                                    {
+                                        innerBuilder.Append($"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})");
+                                    }
+                                }
+                                else
+                                {
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        innerBuilder.Append($"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}");
+                                    }
+                                    else
+                                    {
+                                        innerBuilder.Append($"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}");
+                                    }
+                                }
+                                firstValue = false;
                             }
-                            
-                            // Only add closing parenthesis if at least one value was processed
-                            if (!firstValue)
-                            {
-                                innerBuilder.Append(")");
-                            }
-                            else
-                            {
-                                // Skip this condition if no valid values in collection
-                                continue;
-                            }
+                        }
+                        
+                        // Only add closing parenthesis if at least one value was processed
+                        if (!firstValue)
+                        {
+                            innerBuilder.Append(")");
+                        }
+                        else
+                        {
+                            // Skip this condition if no valid values in collection
+                            continue;
+                        }
                         }
                         else
                         {
