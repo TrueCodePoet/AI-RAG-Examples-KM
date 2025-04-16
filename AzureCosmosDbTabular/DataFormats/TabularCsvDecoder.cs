@@ -95,8 +95,10 @@ internal sealed class TabularCsvDecoder : IContentDecoder
     public bool SupportsMimeType(string mimeType)
     {
         return mimeType != null && (
-            mimeType.StartsWith(MimeTypes.CSVData, StringComparison.OrdinalIgnoreCase) ||
-            mimeType.Equals("application/csv", StringComparison.OrdinalIgnoreCase)
+            mimeType.Equals("text/csv", StringComparison.OrdinalIgnoreCase) ||
+            mimeType.Equals("application/csv", StringComparison.OrdinalIgnoreCase) ||
+            mimeType.Equals("text/plain", StringComparison.OrdinalIgnoreCase) || // Sometimes CSVs are uploaded as plain text
+            (MimeTypes.CSVData != null && mimeType.StartsWith(MimeTypes.CSVData, StringComparison.OrdinalIgnoreCase))
         );
     }
 
@@ -191,10 +193,19 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         // Schema extraction
         string schemaId = string.Empty;
         string importBatchId = string.Empty;
+        if (this._memory == null)
+        {
+            this._log.LogWarning("TabularCsvDecoder: _memory is null, schema will not be created.");
+        }
+        if (string.IsNullOrEmpty(this._datasetName))
+        {
+            this._log.LogWarning("TabularCsvDecoder: _datasetName is null or empty, schema will not be created.");
+        }
         if (this._memory != null && !string.IsNullOrEmpty(this._datasetName))
         {
             try
             {
+                this._log.LogInformation($"TabularCsvDecoder: Attempting to extract and store schema for dataset '{this._datasetName}' using memory instance '{this._memory.GetType().FullName}'.");
                 var schema = ExtractSchemaFromCsv(headers, rows, this._datasetName, csvFileName);
                 if (schema != null)
                 {
@@ -212,6 +223,14 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                         this._log.LogInformation("Stored schema with ID {SchemaId} and import batch ID {ImportBatchId} for dataset {DatasetName}",
                             schemaId, importBatchId, this._datasetName);
                     }
+                    else
+                    {
+                        this._log.LogWarning("TabularCsvDecoder: StoreSchemaAsync returned null or empty schemaId.");
+                    }
+                }
+                else
+                {
+                    this._log.LogWarning("TabularCsvDecoder: ExtractSchemaFromCsv returned null.");
                 }
             }
             catch (Exception ex)
@@ -316,7 +335,8 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             ImportDate = DateTime.UtcNow,
             SourceFile = csvFileName,
             File = csvFileName,
-            Columns = new List<SchemaColumn>()
+            Columns = new List<SchemaColumn>(),
+            Metadata = new Dictionary<string, string>()
         };
 
         foreach (var header in headers)
@@ -339,6 +359,12 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             };
             schema.Columns.Add(column);
         }
+
+        // Ensure document_type is set for schema recognition
+        schema.Metadata["document_type"] = "schema";
+
+        this._log.LogInformation($"TabularCsvDecoder: Created schema with File='{schema.File}', DatasetName='{schema.DatasetName}', Columns={schema.Columns.Count}, Metadata keys: {string.Join(",", schema.Metadata.Keys)}");
+
         return schema;
     }
 
