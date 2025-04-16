@@ -216,6 +216,12 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                         indexName = ctxIndexName;
                         this._log.LogDebug("Using index name '{IndexName}' from context for schema storage", indexName);
                     }
+                    // If indexName is still null or empty, default to _datasetName
+                    if (string.IsNullOrEmpty(indexName) && !string.IsNullOrEmpty(this._datasetName))
+                    {
+                        indexName = this._datasetName;
+                        this._log.LogDebug("Index name not found in context; defaulting to dataset name '{DatasetName}' for schema storage", this._datasetName);
+                    }
                     Console.WriteLine($"TabularCsvDecoder: Storing schema with ID={schema.Id} to database index: {indexName ?? "default"}, " +
                                      $"Dataset: {this._datasetName}, File: {schema.File}");
                     var storedSchemaId = await this._memory.StoreSchemaAsync(schema, indexName, cancellationToken).ConfigureAwait(false);
