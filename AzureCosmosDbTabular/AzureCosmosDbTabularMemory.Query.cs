@@ -154,16 +154,68 @@ internal sealed partial class AzureCosmosDbTabularMemory
 
                             string paramName = $"@p_{parameters.Count}";
                             string paramValue = itemValue;
-                            // Always use LIKE if fuzzy match operator is LIKE, regardless of value length
-                            bool useLike = this._config.FuzzyMatch.Enabled && this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase);
-                            if (useLike)
+                            string sqlCondition = "";
+
+                            // Determine which operator to use for each item
+                            if (this._config.FuzzyMatch.Enabled)
                             {
-                                paramValue = "%" + itemValue.Replace(" ", "%") + "%";
+                                if (this._config.FuzzyMatch.Operator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    paramValue = "%" + itemValue.Replace(" ", "%") + "%";
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        paramValue = paramValue.ToLowerInvariant();
+                                        sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) LIKE {paramName}";
+                                    }
+                                    else
+                                    {
+                                        sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}";
+                                    }
+                                    this._logger.LogDebug("ARRAY/LIKE: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
+                                }
+                                else if (this._config.FuzzyMatch.Operator.Equals("CONTAINS", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        paramValue = paramValue.ToLowerInvariant();
+                                        sqlCondition = $"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}), {paramName})";
+                                    }
+                                    else
+                                    {
+                                        sqlCondition = $"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})";
+                                    }
+                                    this._logger.LogDebug("ARRAY/CONTAINS: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
+                                }
+                                else
+                                {
+                                    // Unknown operator, fallback to exact match
+                                    if (this._config.FuzzyMatch.CaseInsensitive)
+                                    {
+                                        paramValue = paramValue.ToLowerInvariant();
+                                        sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}";
+                                    }
+                                    else
+                                    {
+                                        sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}";
+                                    }
+                                    this._logger.LogDebug("ARRAY/EXACT (unknown operator): SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
+                                }
                             }
-                            if (this._config.FuzzyMatch.CaseInsensitive)
+                            else
                             {
-                                paramValue = paramValue.ToLowerInvariant();
+                                // FuzzyMatch not enabled, use exact match
+                                if (this._config.FuzzyMatch.CaseInsensitive)
+                                {
+                                    paramValue = paramValue.ToLowerInvariant();
+                                    sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}";
+                                }
+                                else
+                                {
+                                    sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}";
+                                }
+                                this._logger.LogDebug("ARRAY/EXACT (fuzzy disabled): SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
                             }
+
                             parameters.Add(Tuple.Create<string, object>(paramName, paramValue));
 
                             if (!firstValue)
@@ -171,46 +223,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
                                 innerBuilder.Append(" OR ");
                             }
 
-                            string sqlCondition = "";
-                            if (useLike)
-                            {
-                                if (this._config.FuzzyMatch.CaseInsensitive)
-                                {
-                                    sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) LIKE {paramName}";
-                                }
-                                else
-                                {
-                                    sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} LIKE {paramName}";
-                                }
-                                innerBuilder.Append(sqlCondition);
-                                this._logger.LogDebug("ARRAY/LIKE: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
-                            }
-                            else if (this._config.FuzzyMatch.Enabled)
-                            {
-                                if (this._config.FuzzyMatch.CaseInsensitive)
-                                {
-                                    sqlCondition = $"CONTAINS(LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}), {paramName})";
-                                }
-                                else
-                                {
-                                    sqlCondition = $"CONTAINS({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}, {paramName})";
-                                }
-                                innerBuilder.Append(sqlCondition);
-                                this._logger.LogDebug("ARRAY/CONTAINS: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
-                            }
-                            else
-                            {
-                                if (this._config.FuzzyMatch.CaseInsensitive)
-                                {
-                                    sqlCondition = $"LOWER({alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName}) = {paramName}";
-                                }
-                                else
-                                {
-                                    sqlCondition = $"{alias}.{AzureCosmosDbTabularMemoryRecord.DataField}.{fieldName} = {paramName}";
-                                }
-                                innerBuilder.Append(sqlCondition);
-                                this._logger.LogDebug("ARRAY/EXACT: SQL={SqlCondition} | Param={ParamName} | Value={ParamValue}", sqlCondition, paramName, paramValue);
-                            }
+                            innerBuilder.Append(sqlCondition);
                             firstValue = false;
                         }
 
