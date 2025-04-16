@@ -9,6 +9,7 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Azure Blob Storage integration for document sources
 - ✅ Local file system processing for testing
 - ✅ Excel file processing with tabular structure preservation
+- ✅ CSV file processing modeled after Excel decoder
 - ✅ Data type preservation during extraction
 - ✅ Pipeline orchestration with customizable handlers
 - ✅ PivotTable structure error handling in Excel files
@@ -36,6 +37,7 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Dynamic AI prompt adapts to fuzzy match operator
 - ✅ Robust AND/OR logic in filters (multiple keys = AND, arrays = OR)
 - ✅ Backend supports both AND and OR logic, translating to SQL WHERE clauses
+- ✅ Consistent Base64 encoding of record IDs
 
 ### Configuration and Setup
 - ✅ Configuration loading from appsettings.json
@@ -60,7 +62,8 @@ The project is in a functional prototype stage, with core components implemented
 ## What's Left to Build
 
 ### Document Processing Enhancements
-- ❌ Support for additional tabular formats (CSV, JSON, etc.)
+- ✅ CSV support implemented
+- ❌ Support for additional tabular formats (JSON, etc.)
 - ❌ Advanced Excel feature support (formulas, charts, etc.)
 - ❌ Batch processing for multiple documents
 - ❌ Incremental updates to existing documents
@@ -171,6 +174,16 @@ The project is in a functional prototype stage, with core components implemented
    - **Workaround**: Implemented fallback mechanism to work with empty/default results when reflection fails.
    - **Status**: Partially fixed (added fault tolerance). Complete solution planned via DI refactoring.
 
+8. **(Resolved)** `System.FormatException`: 'Input is not a valid Base-64 string' during record retrieval.
+   - **Cause:** Record `Id` was not encoded using `EncodeId` before storage.
+   - **Solution:** Ensured `EncodeId` is used consistently when creating `AzureCosmosDbTabularMemoryRecord` instances (verified in `FromMemoryRecord`).
+   - **Status**: Fixed.
+
+9. **(Monitoring)** Potential CSV Row Skipping: Initial tests showed fewer rows imported from CSV than expected.
+   - **Cause:** Potentially incorrect `HeaderRowIndex` config or blank lines in the CSV.
+   - **Mitigation:** Added detailed logging (`totalLines`, `totalRowsAdded`) to `TabularCsvDecoder` to help diagnose during further testing.
+   - **Status**: Monitoring.
+
 ### Result Presentation
 1. **Overwhelming Results for Large Datasets**: No control over the number of results shown to users.
    - **Impact**: Users could be overwhelmed by large result sets, especially for queries matching many records.
@@ -218,9 +231,12 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-11 | Redesigned TabularFilterHelper to use Reflection API | Completed |
 | 2025-04-11 | Added result limiting capability to control displayed sources | Completed |
 | 2025-04-14 | Diagnosed IMemoryDb access failure | Completed |
-| 2025-04-10 | End-to-end testing | In Progress |
-| 2025-04-15 | Performance optimization | Not Started |
-| 2025-04-20 | Documentation and examples | In Progress |
+| 2025-04-16 | Implemented TabularCsvDecoder | Completed |
+| 2025-04-16 | Fixed Base64 ID encoding issue | Completed |
+| 2025-04-16 | Added CSV row skipping diagnostics | Completed |
+| 2025-04-16 | End-to-end testing (Excel & CSV) | In Progress |
+| 2025-04-18 | Performance optimization | Not Started |
+| 2025-04-25 | Documentation and examples | In Progress |
 
 ## Next Milestone Targets
 
@@ -230,8 +246,8 @@ The project is in a functional prototype stage, with core components implemented
    - Update `TabularFilterHelper` constructor usage.
 
 2. **Complete end-to-end testing** (Target: 2025-04-15)
-   - Test with various Excel file formats
-   - Validate query accuracy and performance
+   - Test with various Excel **and CSV** file formats
+   - Validate query accuracy and performance, **monitor CSV row counts**
    - Document test results and findings
 
 3. **Implement performance optimizations** (Target: 2025-04-18)

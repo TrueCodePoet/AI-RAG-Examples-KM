@@ -38,7 +38,11 @@ The project is currently focused on implementing and testing the tabular data pr
 - Fixed source dictionary extraction to properly parse text field for metadata
 - Enhanced schema ID and import batch ID extraction from text field
 - Fixed data dictionary population to properly deserialize tabular_data field
-- Refined the `ParseSentenceFormat` method in `AzureCosmosDbTabularMemoryRecord` to correctly handle the text format and avoid parsing artifacts
+  - Refined the `ParseSentenceFormat` method in `AzureCosmosDbTabularMemoryRecord` to correctly handle the text format and avoid parsing artifacts
+  - Implemented `TabularCsvDecoder` modeled after `TabularExcelDecoder` to support CSV file ingestion.
+  - Ensured `TabularCsvDecoder` generates the exact same "text" sentence format as the Excel decoder for parser compatibility.
+  - Added logging to `TabularCsvDecoder` to track lines read vs. rows added for diagnosing potential row skipping issues.
+  - Resolved `System.FormatException` during record retrieval by ensuring all record IDs are Base64 encoded using `EncodeId` before storage (verified in `FromMemoryRecord`).
 
 ### Query Processing
 - Enhanced KernelMemoryQueryProcessor with filter generation capabilities
@@ -85,17 +89,17 @@ The project is currently focused on implementing and testing the tabular data pr
 
 ### Short-term Tasks
 - **(Done)** Refactor Memory Initialization: `KernelInitializer.InitializeMemory` now uses DI to resolve the `IMemoryDb` instance and returns it alongside `IKernelMemory`. `Program.cs` uses this resolved instance and no longer uses the `MemoryHelper` reflection logic.
-2. **Testing with Larger Datasets**: Test the system with larger Excel files to evaluate performance and accuracy
-3. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries
-4. **Error Handling**: Continue improving error handling for edge cases in Excel processing
-5. **Documentation**: Add more detailed documentation on the tabular data processing capabilities
-6. **Result Presentation**: Further enhance the result limiting feature with pagination or summarization options
+2. **Testing with Larger Datasets**: Test the system with larger Excel **and CSV** files to evaluate performance and accuracy, **specifically checking for row skipping issues in CSVs**.
+3. **Filter Generation Improvements**: Enhance the filter generation prompt to handle more complex queries.
+4. **Error Handling**: Continue improving error handling for edge cases in Excel and CSV processing.
+5. **Documentation**: Add more detailed documentation on the tabular data processing capabilities (Excel & CSV).
+6. **Result Presentation**: Further enhance the result limiting feature with pagination or summarization options.
 
 ### Medium-term Goals
-1. **Support for Additional File Formats**: Extend the tabular processing to other structured formats (CSV, JSON, etc.)
-2. **Performance Optimization**: Optimize the processing pipeline for large datasets
-3. **User Interface**: Develop a simple UI for demonstrating the query capabilities
-4. **Batch Processing**: Add support for batch processing of multiple files
+1. **Support for Additional File Formats**: Extend the tabular processing to other structured formats (JSON, etc.). **(CSV support added)**
+2. **Performance Optimization**: Optimize the processing pipeline for large datasets.
+3. **User Interface**: Develop a simple UI for demonstrating the query capabilities.
+4. **Batch Processing**: Add support for batch processing of multiple files.
 
 ### Long-term Vision
 1. **Advanced Filtering**: Implement more sophisticated filtering capabilities (ranges, fuzzy matching, etc.)
@@ -165,6 +169,12 @@ The project is currently focused on implementing and testing the tabular data pr
       - Modified `KernelMemoryQueryProcessor` to detect missing memoryDb and provide clear warnings
       - Added skip flags to bypass dataset identification when unavailable
       - Added detailed diagnostics about reflection failures
+13. **(Resolved)** `System.FormatException`: 'Input is not a valid Base-64 string' during record retrieval.
+    - **Cause:** Record `Id` was not encoded using `EncodeId` before storage.
+    - **Solution:** Ensured `EncodeId` is used consistently when creating `AzureCosmosDbTabularMemoryRecord` instances (verified in `FromMemoryRecord`).
+14. **(Monitoring)** Potential CSV Row Skipping: Initial tests showed fewer rows imported from CSV than expected.
+    - **Cause:** Potentially incorrect `HeaderRowIndex` config or blank lines in the CSV.
+    - **Mitigation:** Added detailed logging (`totalLines`, `totalRowsAdded`) to `TabularCsvDecoder` to help diagnose during further testing.
 
 ## Rate Limiting Considerations
 
@@ -197,6 +207,7 @@ Potential solutions include:
 | Azure Cosmos DB | Implemented | Custom implementation for tabular data with unified schema storage |
 | Azure Blob Storage | Implemented | Basic functionality for document ingestion |
 | Excel Processing | Implemented | Custom decoder for tabular data preservation with PivotTable handling |
+| CSV Processing   | Implemented | Custom decoder modeled after Excel decoder, requires exact text format match |
 | Filter Generation | Implemented | AI-driven approach with room for improvement |
 | Query Processing | Implemented | Basic functionality with specialized formatting and result limiting |
 | Schema Management | Implemented | Schema extraction, storage, and validation in the same container as data |
