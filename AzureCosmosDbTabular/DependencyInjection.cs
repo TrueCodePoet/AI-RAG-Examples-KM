@@ -15,6 +15,8 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// </summary>
 public static class DependencyInjection
 {
+    // Embedding dimension for vector search (e.g., OpenAI Ada v2 = 1536)
+    public const int EmbeddingDimension = 1536;
     /// <summary>
     /// Add Azure Cosmos DB Tabular memory connector to Kernel Memory.
     /// </summary>
@@ -123,7 +125,7 @@ public static class DependencyInjection
     /// <param name="datasetName">The dataset name to use for schema extraction.</param>
     /// <param name="configure">Optional action to configure the decoder.</param>
     /// <returns>The Kernel Memory builder.</returns>
-    public static IKernelMemoryBuilder WithTabularExcelDecoderAndDataset(
+    public static IKernelMemoryBuilder WithTabularDecoderAndDataset(
         this IKernelMemoryBuilder builder,
         string datasetName,
         Action<TabularExcelDecoderConfig>? configure = null)

@@ -106,6 +106,10 @@ Console.WriteLine("\n*** Processing files through both pipelines ***");
 Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
 await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
 
+Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
+await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.csv");
+
+
 Console.WriteLine("\n*** Processing through Standard Pipeline ***");
 await standardFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
 

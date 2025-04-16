@@ -128,7 +128,7 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
             {
                 // Tabular pipeline - specialized for structured data
                 builder = builder
-                    .WithTabularExcelDecoderAndDataset(
+                    .WithTabularDecoderAndDataset(
                         datasetName: indexName,
                         configure: config =>
                         {

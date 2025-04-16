@@ -84,7 +84,7 @@ internal sealed partial class AzureCosmosDbTabularMemory
             
             // This will catch if index needs to be created
             if (! await this.IndexExistsAsync(containerName,cancellationToken).ConfigureAwait(false)){
-                await this.CreateIndexAsync(containerName, 0, cancellationToken).ConfigureAwait(false);
+                await this.CreateIndexAsync(containerName, DependencyInjection.EmbeddingDimension, cancellationToken).ConfigureAwait(false);
             }
 
 
