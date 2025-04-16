@@ -172,24 +172,40 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                 }
 
                 // Data row
-                var rowData = new Dictionary<string, object>();
-                if (this._config.IncludeRowNumbers)
+                try
                 {
-                    rowData["_rowNumber"] = rowIndex + 1;
-                }
-                if (this._config.IncludeWorksheetNames)
-                {
-                    rowData["_csv_file"] = csvFileName;
-                }
+                    var rowData = new Dictionary<string, object>();
+                    if (this._config.IncludeRowNumbers)
+                    {
+                        rowData["_rowNumber"] = rowIndex + 1;
+                    }
+                    if (this._config.IncludeWorksheetNames)
+                    {
+                        rowData["_csv_file"] = csvFileName;
+                    }
 
-                for (int i = 0; i < fields.Count; i++)
-                {
-                    string columnName = (i < headers.Count) ? headers[i] : $"{this._config.DefaultColumnPrefix}{i + 1}";
-                    object value = string.IsNullOrEmpty(fields[i]) ? this._config.BlankCellValue : fields[i];
-                    rowData[columnName] = value;
+                    for (int i = 0; i < fields.Count; i++)
+                    {
+                        string columnName = (i < headers.Count) ? headers[i] : $"{this._config.DefaultColumnPrefix}{i + 1}";
+                        object value = string.IsNullOrEmpty(fields[i]) ? this._config.BlankCellValue : fields[i];
+                        rowData[columnName] = value;
+                    }
+
+                    // Optionally skip empty rows if configured
+                    if (this._config.SkipEmptyRows && rowData.All(kvp => string.IsNullOrEmpty(kvp.Value?.ToString())))
+                    {
+                        this._log.LogWarning("TabularCsvDecoder: Skipping empty row at CSV line {LineNumber} (row index {RowIndex})", totalLines, rowIndex);
+                    }
+                    else
+                    {
+                        rows.Add(rowData);
+                        totalRowsAdded++;
+                    }
                 }
-                rows.Add(rowData);
-                totalRowsAdded++;
+                catch (Exception ex)
+                {
+                    this._log.LogError(ex, "TabularCsvDecoder: Failed to process row at CSV line {LineNumber} (row index {RowIndex}). Row will be skipped.", totalLines, rowIndex);
+                }
                 rowIndex++;
             }
         }
@@ -306,6 +322,13 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             var chunkText = textBuilder.ToString().TrimEnd();
             var chunk = new Chunk(chunkText, chunkNumber, metadata);
             result.Sections.Add(chunk);
+        }
+
+        // Log import batch ID and instructions for DB count check
+        if (!string.IsNullOrEmpty(importBatchId))
+        {
+            this._log.LogInformation("TabularCsvDecoder: Import complete. Parsed {RowCount} rows. Import batch ID: {ImportBatchId}", rows.Count, importBatchId);
+            Console.WriteLine($"TabularCsvDecoder: To verify DB record count for this import, query Cosmos DB for records with import_batch_id = '{importBatchId}'.");
         }
 
         return result;

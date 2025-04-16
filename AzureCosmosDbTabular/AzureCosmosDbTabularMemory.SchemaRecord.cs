@@ -40,8 +40,9 @@ internal sealed partial class AzureCosmosDbTabularMemory
                    SELECT TOP @limit
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
                    FROM c
-                   WHERE (IS_STRING(c.schemaId) AND c.schemaId = @schemaId)
-                      OR (IS_ARRAY(c.schemaId) AND EXISTS(SELECT VALUE t FROM t IN c.schemaId WHERE t = @schemaId))
+                   WHERE (IS_NULL(c.metadata.document_type) OR c.metadata.document_type != 'schema')
+                     AND ((IS_STRING(c.schemaId) AND c.schemaId = @schemaId)
+                      OR (IS_ARRAY(c.schemaId) AND EXISTS(SELECT VALUE t FROM t IN c.schemaId WHERE t = @schemaId)))
                    """;
 
         var queryDefinition = new QueryDefinition(sql)
@@ -85,8 +86,9 @@ internal sealed partial class AzureCosmosDbTabularMemory
                    SELECT TOP @limit
                      {AzureCosmosDbTabularMemoryRecord.Columns("c", withEmbeddings)}
                    FROM c
-                   WHERE (IS_STRING(c.importBatchId) AND c.importBatchId = @importBatchId)
-                      OR (IS_ARRAY(c.importBatchId) AND EXISTS(SELECT VALUE t FROM t IN c.importBatchId WHERE t = @importBatchId))
+                   WHERE (IS_NULL(c.metadata.document_type) OR c.metadata.document_type != 'schema')
+                     AND ((IS_STRING(c.importBatchId) AND c.importBatchId = @importBatchId)
+                      OR (IS_ARRAY(c.importBatchId) AND EXISTS(SELECT VALUE t FROM t IN c.importBatchId WHERE t = @importBatchId)))
                    """;
 
         var queryDefinition = new QueryDefinition(sql)

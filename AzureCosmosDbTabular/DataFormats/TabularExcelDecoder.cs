@@ -169,6 +169,10 @@ public sealed class TabularExcelDecoder : IContentDecoder
         int totalRows = 0;
         int processedRows = 0;
         int totalChunks = 0;
+        
+        // Create holder variables that will persist throughout the method
+        string methodLevelSchemaId = string.Empty;
+        string methodLevelImportBatchId = string.Empty;
 
         try
         {
@@ -225,7 +229,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
 
         using (workbook) // Ensure disposal if workbook was loaded successfully
         {
-                    // Variables to store schema ID and import batch ID
+                    // Local variables to store schema ID and import batch ID
                     string schemaId = string.Empty;
                     string importBatchId = string.Empty;
                     
@@ -257,6 +261,10 @@ public sealed class TabularExcelDecoder : IContentDecoder
                                     {
                                         schemaId = storedSchemaId;
                                         importBatchId = schema.ImportBatchId;
+                                        
+                                        // Store in method-level variables for later use
+                                        methodLevelSchemaId = schemaId;
+                                        methodLevelImportBatchId = importBatchId;
                                         this._log.LogInformation("Stored schema with ID {SchemaId} and import batch ID {ImportBatchId} for dataset {DatasetName}", 
                                             schemaId, importBatchId, this._datasetName);
                                     }
@@ -525,6 +533,13 @@ public sealed class TabularExcelDecoder : IContentDecoder
         
         this._log.LogInformation("Excel processing complete. Created {ChunkCount} chunks from {RowCount} rows across {WorksheetCount} worksheets.", 
             totalChunks, processedRows, totalProcessedWorksheets);
+
+        // Log import batch ID and instructions for DB count check using the method-level variable
+        if (!string.IsNullOrEmpty(methodLevelImportBatchId))
+        {
+            this._log.LogInformation("TabularExcelDecoder: Import complete. Parsed {RowCount} rows. Import batch ID: {ImportBatchId}", processedRows, methodLevelImportBatchId);
+            Console.WriteLine($"TabularExcelDecoder: To verify DB record count for this import, query Cosmos DB for records with import_batch_id = '{methodLevelImportBatchId}'.");
+        }
 
         return result;
     }
