@@ -205,8 +205,9 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         {
             try
             {
-                this._log.LogInformation($"TabularCsvDecoder: Attempting to extract and store schema for dataset '{this._datasetName}' using memory instance '{this._memory.GetType().FullName}'.");
+                this._log.LogInformation($"TabularCsvDecoder: [PRE-SCHEMA] About to extract and store schema for dataset '{this._datasetName}' using memory instance '{this._memory.GetType().FullName}'.");
                 var schema = ExtractSchemaFromCsv(headers, rows, this._datasetName, csvFileName);
+                this._log.LogInformation($"TabularCsvDecoder: [POST-SCHEMA] Schema object created: ID={schema?.Id ?? "null"}, File={schema?.File ?? "null"}, DatasetName={schema?.DatasetName ?? "null"}");
                 if (schema != null)
                 {
                     string? indexName = null;
@@ -239,7 +240,11 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             }
             catch (Exception ex)
             {
-                this._log.LogError(ex, "Error extracting/storing schema from CSV file for dataset {DatasetName}", this._datasetName);
+                var errorMsg = $"CSV_SCHEMA_ERROR: Failed to create/store schema for dataset '{this._datasetName}', file '{csvFileName}'. " +
+                               $"_memory is {(this._memory == null ? "null" : "set")}, _datasetName='{this._datasetName}', headers=[{string.Join(",", headers)}]. " +
+                               $"Exception: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+                Console.WriteLine(errorMsg);
+                this._log.LogError(ex, errorMsg);
             }
         }
 
@@ -361,7 +366,8 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             {
                 normalizedName = NormalizeHeaderName(header);
             }
-            string dataType = InferColumnDataType(rows, header);
+            // For CSV, always use string type
+            string dataType = "string";
             var commonValues = SampleColumnValues(rows, header);
 
             var column = new SchemaColumn
