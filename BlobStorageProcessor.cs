@@ -175,9 +175,20 @@ namespace AI_RAG_Examples_KM
                     var stopwatch = new System.Diagnostics.Stopwatch();
                     stopwatch.Start();
                     
+                    // Create a CancellationToken with IndexName property set
+                    var cts = new CancellationTokenSource();
+                    var token = cts.Token;
+                    // Use reflection to set the IndexName property if supported
+                    var indexNameProp = token.GetType().GetProperty("IndexName");
+                    if (indexNameProp != null && indexNameProp.CanWrite)
+                    {
+                        indexNameProp.SetValue(token, _indexName);
+                    }
+
                     var docId = await _memory.ImportDocumentAsync(localFilePath,
                         index: _indexName,
-                        tags: new TagCollection() { { "FilePath", localFilePath } }
+                        tags: new TagCollection() { { "FilePath", localFilePath } },
+                        cancellationToken: token
                         //,steps: ["extract_text", "split_text_in_partitions", "generate_embeddings", "save_current_records",
                         //        "summarize_data", "split_text_in_partitions", "generate_embeddings", "save_current_records"]
                         );
