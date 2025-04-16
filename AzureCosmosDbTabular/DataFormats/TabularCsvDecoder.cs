@@ -131,12 +131,15 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         List<Dictionary<string, object>> rows = new();
 
         // Read the CSV into memory (assume UTF-8)
+        int totalLines = 0;
+        int totalRowsAdded = 0;
         using (var reader = new StreamReader(data, Encoding.UTF8, true, 1024, leaveOpen: true))
         {
             int rowIndex = 0;
             while (!reader.EndOfStream)
             {
                 string? line = await reader.ReadLineAsync();
+                totalLines++;
                 if (line == null) break;
 
                 List<string> fields = ParseCsvLine(line);
@@ -186,10 +189,12 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                     rowData[columnName] = value;
                 }
                 rows.Add(rowData);
+                totalRowsAdded++;
                 rowIndex++;
             }
         }
 
+        this._log.LogInformation($"TabularCsvDecoder: Finished reading CSV. Total lines: {totalLines}, Rows added: {totalRowsAdded}, Headers: {headers.Count}");
         // Schema extraction
         string schemaId = string.Empty;
         string importBatchId = string.Empty;
@@ -281,7 +286,8 @@ internal sealed class TabularCsvDecoder : IContentDecoder
 
             // Build sentence format
             var textBuilder = new StringBuilder();
-            textBuilder.Append($"Record from csv_file {csvFileName}, row {metadata["rowNumber"]}: ");
+            // Use the same prefix as Excel for parser compatibility
+            textBuilder.Append($"Record from worksheet {csvFileName}, row {metadata["rowNumber"]}: ");
             if (!string.IsNullOrEmpty(schemaId))
             {
                 textBuilder.Append($"schema_id is {schemaId}. ");
