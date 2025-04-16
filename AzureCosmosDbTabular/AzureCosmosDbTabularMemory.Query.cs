@@ -304,13 +304,12 @@ internal sealed partial class AzureCosmosDbTabularMemory
 
         if (firstOuterFilter) // means outerBuilder is empty (no valid filters found)
         {
-            // Always exclude schema records
+            // Only exclude schema records if there are no other filters
             return ("WHERE (IS_NULL(c.metadata.document_type) OR c.metadata.document_type != 'schema')", Array.Empty<Tuple<string, object>>());
         }
 
-        // Always exclude schema records in addition to user filters
-        string schemaExclusion = "(IS_NULL(c.metadata.document_type) OR c.metadata.document_type != 'schema')";
-        string whereClause = $"WHERE {outerBuilder} AND {schemaExclusion}";
+        // If there are user filters, do not add schema exclusion
+        string whereClause = $"WHERE {outerBuilder}";
         return (whereClause, parameters);
     }
 
