@@ -131,7 +131,7 @@ public static class DependencyInjection
         var config = new TabularExcelDecoderConfig();
         configure?.Invoke(config);
 
-        // Register the decoder factory
+        // Register the Excel decoder factory
         builder.Services.AddSingleton<IContentDecoder>(serviceProvider =>
         {
             // Get logger for diagnostic information
@@ -165,8 +165,21 @@ public static class DependencyInjection
                 logger?.LogInformation("Successfully obtained AzureCosmosDbTabularMemory instance directly");
             }
             
-            // Create the decoder with the memory instance (may be null)
+            // Create the Excel decoder with the memory instance (may be null)
             return TabularExcelDecoder.CreateWithDatasetName(config, datasetName, memory, loggerFactory);
+        });
+
+        // Register the CSV decoder factory
+        builder.Services.AddSingleton<IContentDecoder>(serviceProvider =>
+        {
+            var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+            var memory = serviceProvider.GetService<AzureCosmosDbTabularMemory>();
+            if (memory == null)
+            {
+                var memoryDb = serviceProvider.GetService<IMemoryDb>();
+                memory = memoryDb as AzureCosmosDbTabularMemory;
+            }
+            return TabularCsvDecoder.CreateWithDatasetName(config, datasetName, memory, loggerFactory);
         });
 
         return builder;

@@ -95,7 +95,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
     public bool SupportsMimeType(string mimeType)
     {
         return mimeType != null && (
-            mimeType.Equals("text/csv", StringComparison.OrdinalIgnoreCase) ||
+            mimeType.StartsWith(MimeTypes.CSVData, StringComparison.OrdinalIgnoreCase) ||
             mimeType.Equals("application/csv", StringComparison.OrdinalIgnoreCase)
         );
     }
