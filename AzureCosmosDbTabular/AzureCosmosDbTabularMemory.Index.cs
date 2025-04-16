@@ -22,6 +22,8 @@ internal sealed partial class AzureCosmosDbTabularMemory
     /// <inheritdoc/>
     public async Task CreateIndexAsync(string index, int vectorSize, CancellationToken cancellationToken = default)
     {
+        this._logger.LogInformation("CreateIndexAsync: Attempting to create or ensure container '{Index}' in database '{Database}' with vector size {VectorSize}", index, this._databaseName, vectorSize);
+
         var databaseResponse = await this._cosmosClient
             .CreateDatabaseIfNotExistsAsync(this._databaseName, cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -69,12 +71,20 @@ internal sealed partial class AzureCosmosDbTabularMemory
             Type = VectorIndexType.QuantizedFlat // Switched to QuantizedFlat to support higher dimensions (e.g., 1536)
         });
 
-        var containerResponse = await databaseResponse.Database.CreateContainerIfNotExistsAsync(
-            containerProperties,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var containerResponse = await databaseResponse.Database.CreateContainerIfNotExistsAsync(
+                containerProperties,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        this._logger.LogInformation("Created/Ensured container {Index} in database {Database} with Vector Index Path {VectorPath}",
-            index, this._databaseName, vectorFieldPath); // Log the correct path used
+            this._logger.LogInformation("CreateIndexAsync: Created/Ensured container '{Index}' in database '{Database}' with Vector Index Path '{VectorPath}'",
+                index, this._databaseName, vectorFieldPath); // Log the correct path used
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogError(ex, "CreateIndexAsync: Error creating container '{Index}' in database '{Database}'", index, this._databaseName);
+            throw;
+        }
     }
 
    // Checks if a container (index) exists in the database.
