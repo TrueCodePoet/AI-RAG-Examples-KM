@@ -691,18 +691,39 @@ public class KernelMemoryQueryProcessor
 
                 if (datasetList.Count > 0)
                 {
-                    string datasetPromptTemplate = @"
-You are analyzing a user query to determine which dataset it is most likely referring to.
+                    string datasetPromptTemplate = 
+@"You are analyzing a user query to determine which dataset (schema) it is most likely referring to.
 
-Available datasets:
-{{$datasets}}
+Available datasets (with example fields): {{$datasets}}
 
 User query: {{$query}}
 
-Analyze the query and determine which dataset it is most likely referring to.
-Return ONLY the name of the most relevant dataset. If no dataset seems relevant, return 'none'.
+Analyze the query and determine which dataset(s) it is most likely referring to. Consider both the dataset name and any available schema field names or examples.
+Return a JSON array of up to 3 candidate dataset names, ordered from most to least likely. If no dataset seems relevant, return an empty array [].
 
-Dataset:";
+FORMAT:
+Output MUST be a pure, correctly formatted JSON array of strings.
+
+EXAMPLES:
+User query: Show me all servers with a Server Purpose of 'Corelight Network monitoring sensor'.
+Available datasets: [""ServerInventory"", ""NetworkDevices"", ""ApplicationList""]
+Output: [""ServerInventory""]
+
+User query: List all network devices and their IP addresses.
+Available datasets: [""ServerInventory"", ""NetworkDevices"", ""ApplicationList""]
+Output: [""NetworkDevices""]
+
+User query: What applications are running on server X?
+Available datasets: [""ServerInventory"", ""NetworkDevices"", ""ApplicationList""]
+Output: [""ApplicationList""]
+
+User query: Tell me about the system architecture.
+Available datasets: [""ServerInventory"", ""NetworkDevices"", ""ApplicationList""]
+Output: []
+
+User query: {{$query}}
+Output:
+";
 
                     var datasetFunction = _kernel.CreateFunctionFromPrompt(
                         datasetPromptTemplate,
