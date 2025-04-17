@@ -265,15 +265,16 @@ Dataset:";
         {{$schemaInfo}}
 
         RULES FOR OUTPUT KEYS:
-        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
+        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server"", ""project""). Do NOT invent new keys.
         2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
         3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
         4. Extract the specific value mentioned for the criterion. For string fields, use a substring or keyword (not the full value) for fuzzy search, and use '%' as a wildcard.
-        5. For OR logic, use an array of patterns for a key: { ""data.server_purpose"": [""%corelight%"", ""%sensor%""] }
-        6. Format the output STRICTLY as a JSON object containing the identified key-value pairs.
+        5. For OR logic, use an array of patterns for a key: { ""data.purpose"": [""%corelight%"", ""%sensor%""] }
+        6. Focus on return as many potential records as you can while narrowing as much as you can.  be optimistic not pessimistic.
         7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
 
         FORMAT:
+        Format the output STRICTLY as a JSON object containing the identified key-value pairs.
         DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
 
         EXAMPLES:
@@ -284,7 +285,7 @@ Dataset:";
         Output: {""project"": [""phoenix%"", ""austin%""]}
 
         Question: What is the server purpose for VAXVNAGG01?
-        Output: {""data.server_name"": ""%vaxv%""}
+        Output: {""data.name"": ""%vaxv%""}
 
         Question: Tell me about the system architecture.
         Output: {}
@@ -306,15 +307,16 @@ Dataset:";
         {{$schemaInfo}}
 
         RULES FOR OUTPUT KEYS:
-        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
+        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server"", ""project""). Do NOT invent new keys.
         2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
         3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
         4. Extract the specific value mentioned for the criterion. For string fields, use a substring or keyword (not the full value) for fuzzy search.
-        5. For OR logic, use an array of patterns for a key: { ""data.server_purpose"": [""corelight"", ""sensor""] }
-        6. Format the output STRICTLY as a JSON object containing the identified key-value pairs.
+        5. For OR logic, use an array of patterns for a key: { ""data.purpose"": [""corelight"", ""sensor""] }
+        6. Focus on return as many potential records as you can while narrowing as much as you can.  be optimistic not pessimistic.
         7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
-
+ 
         FORMAT:
+        Format the output STRICTLY as a JSON object containing the identified key-value pairs.
         DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
 
         EXAMPLES:
@@ -324,8 +326,8 @@ Dataset:";
         Question: List all servers for the 'Phoenix' or 'Austin' project.
         Output: {""project"": [""phoenix"", ""austin""]}
 
-        Question: What is the server purpose for VAXVNAGG01?
-        Output: {""data.server_name"": ""vaxv""}
+        Question: What is the purpose for VAXVNAGG01?
+        Output: {""data.name"": ""vaxv""}
 
         Question: Tell me about the system architecture.
         Output: {}
@@ -521,8 +523,10 @@ Dataset:";
             
             // --- Format all raw search results for prompt injection ---
             string allRawResults = "";
+            int resultCount = 0;
             foreach (var doc in searchResults.Results)
             {
+                resultCount++;
                 string sourceName = doc.SourceName;
                 string docId = doc.DocumentId ?? "N/A";
                 string lastUpdate = doc.Partitions.FirstOrDefault()?.LastUpdate.ToString("d") ?? "N/A";
@@ -530,7 +534,7 @@ Dataset:";
                 var partitionTexts = doc.Partitions != null
                     ? string.Join("\n      ", doc.Partitions.Select(p => p.Text))
                     : "";
-                allRawResults += $"  - {sourceName} (ID: {docId}) Link: {link} [LastUpdate: {lastUpdate}]\n    Partition Texts:\n      {partitionTexts}\n";
+                allRawResults += $"  - {sourceName} (ID: {docId}) Link: {link} [LastUpdate: {lastUpdate}]\n    Partition Texts:\n   ROW: {resultCount} : {partitionTexts}\n";
             }
             
             Console.WriteLine("--- First query was for raw search data. Now executing AskAsync for answer synthesis. ---");
@@ -586,7 +590,15 @@ Dataset:";
         ---
          
         Only Respond with information from Kernel Memory including RelevantSources.
-         
+
+        DO NOT FABRICATE RESULTS.
+        You are given row-level results. Your task is to return only the rows that fully match the query conditions.
+        For tabular data queries, it is essential to evaluate the entire row and include only those where all conditions are satisfied.
+        You are provided the complete row—return data only if the entire row meets the specified criteria.
+        If the row does not meet the criteria, do not include it in your response.
+        If the row is not relevant, do not include it in your response.
+
+
         If you don't know, then respond with 'This information is not part of our internal documents.'
          
         If you do know then Start with 'According to our internal documents'. Reply with the best answer.
