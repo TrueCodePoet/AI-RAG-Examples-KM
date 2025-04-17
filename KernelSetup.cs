@@ -153,13 +153,12 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
             var memory = builder.Build<MemoryServerless>(
                 new KernelMemoryBuilderBuildOptions { AllowMixingVolatileAndPersistentData = true });
 
-            Console.WriteLine($"* Registering pipeline handlers for {(useTabularPipeline ? "tabular" : "standard")} pipeline...");
-
+            //Console.WriteLine($"* Registering pipeline handlers for {(useTabularPipeline ? "tabular" : "standard")} pipeline...");
             // Common handlers for both pipelines
-            memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.TextExtractionHandler>("extract_text");
-            memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.GenerateEmbeddingsHandler>("generate_embeddings");
-            memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SummarizationHandler>("summarize_data");
-            memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SaveRecordsHandler>("save_current_records");
+            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.TextExtractionHandler>("extract_text");
+            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.GenerateEmbeddingsHandler>("generate_embeddings");
+            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SummarizationHandler>("summarize_data");
+            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SaveRecordsHandler>("save_current_records");
 
             // Only add TextPartitioningHandler for standard pipeline
             if (!useTabularPipeline)
