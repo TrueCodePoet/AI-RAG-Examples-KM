@@ -139,113 +139,12 @@ public class KernelMemoryQueryProcessor
             // --- Dataset Identification Step ---
             Console.WriteLine("--- Identifying Dataset ---");
             
-            string datasetName = string.Empty;
-            
-            try
-            {
-                // Create a TabularFilterHelper with the memory instance provided in constructor if available
-                TabularFilterHelper filterHelper;
-                if (_tabularMemoryDb != null)
-                {
-                    Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
-                    filterHelper = new TabularFilterHelper(_tabularMemoryDb);
-                }
-                else
-                {
-                    // Fall back to the original approach with reflection
-                    filterHelper = new TabularFilterHelper(_memory, _indexName);
-                }
-                
-                // Get list of available datasets
-                var datasetList = await filterHelper.ListDatasetNamesAsync();
-                
-                if (datasetList.Count > 0)
-                {
-                    // Use LLM to identify the most relevant dataset
-                    string datasetPromptTemplate = @"
-You are analyzing a user query to determine which dataset it is most likely referring to.
-
-Available datasets:
-{{$datasets}}
-
-User query: {{$query}}
-
-Analyze the query and determine which dataset it is most likely referring to.
-Return ONLY the name of the most relevant dataset. If no dataset seems relevant, return 'none'.
-
-Dataset:";
-
-                    var datasetFunction = _kernel.CreateFunctionFromPrompt(
-                        datasetPromptTemplate,
-                        new OpenAIPromptExecutionSettings { Temperature = 0.0 });
-                    
-                    var datasetResult = await _kernel.InvokeAsync(datasetFunction, new KernelArguments
-                    {
-                        ["datasets"] = string.Join("\n", datasetList.Select(d => $"- {d}")),
-                        ["query"] = question
-                    });
-                    
-                    datasetName = datasetResult.GetValue<string>()?.Trim();
-                    
-                    if (string.IsNullOrEmpty(datasetName) || datasetName.Equals("none", StringComparison.OrdinalIgnoreCase))
-                    {
-                        datasetName = string.Empty;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Identified dataset: {datasetName}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error during dataset identification: {ex.Message}");
-                datasetName = string.Empty; // Ensure datasetName is empty on error
-            }
+            string datasetName = await GetDatasetNameAsync(question);
 
             // --- Fetch Schema Info (if dataset identified) ---
             TabularDataSchema? schema = null;
             string formattedSchemaInfo = "No schema information available for filter generation."; // Default
-            if (!string.IsNullOrEmpty(datasetName))
-            {
-                Console.WriteLine($"--- Fetching Schema for: {datasetName} ---");
-                try
-                {
-                    // Create a TabularFilterHelper with the memory instance provided in constructor if available
-                    TabularFilterHelper schemaHelper;
-                    if (_tabularMemoryDb != null)
-                    {
-                        Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
-                        schemaHelper = new TabularFilterHelper(_tabularMemoryDb);
-                    }
-                    else
-                    {
-                        // Fall back to the original approach with reflection
-                        schemaHelper = new TabularFilterHelper(_memory, _indexName);
-                    }
-                    schema = await schemaHelper.GetSchemaAsync(datasetName);
-                    if (schema != null)
-                    {
-                        formattedSchemaInfo = FormatSchemaForPrompt(schema);
-                        Console.WriteLine($"Schema Info Found:\n{formattedSchemaInfo}");
-                    }
-                    else
-                    {
-                         Console.WriteLine($"Schema object not found for dataset: {datasetName}");
-                         formattedSchemaInfo = $"Schema object not found for dataset '{datasetName}'. Cannot provide specific field info.";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error fetching schema for dataset {datasetName}: {ex.Message}");
-                    formattedSchemaInfo = $"Error fetching schema for dataset '{datasetName}'. Cannot provide specific field info.";
-                    // Continue without schema info, LLM will have less context
-                }
-            }
-            else
-            {
-                 Console.WriteLine("No dataset identified, skipping schema fetch.");
-            }
+            (schema, formattedSchemaInfo) = await GetSchemaInfoAsync(datasetName);
 
             // --- Filter Generation Step ---
             Console.WriteLine("--- Generating Filters ---");
@@ -255,40 +154,42 @@ Dataset:";
             if (_fuzzyMatchOperator.Equals("LIKE", StringComparison.OrdinalIgnoreCase))
             {
                 filterPromptTemplate = @"
-        Analyze the user's question to identify specific criteria that can be used to filter tabular data or apply tags, based ONLY on the provided schema fields.
+        Analyze the user's question to identify up to 5 different filter templates that could be used to filter tabular data or apply tags, based ONLY on the provided schema fields.
 
         IMPORTANT: For string fields, generate partial (fuzzy) values that will be used with a SQL LIKE operator for matching. Use the '%' character as a wildcard at the start, end, or within values (e.g., '%corelight%', 'phoenix%', '%sensor'). You may generate multiple patterns if appropriate. Matching is case-insensitive.
 
         For AND logic, include multiple keys in the JSON object (all must match). For OR logic, use an array of values for a key (any value may match).
 
+        Return your answer as a JSON array of up to 5 filter templates. Each template should be a JSON object as described below.
+
         Available Schema Fields (use these exact keys):
         {{$schemaInfo}}
 
         RULES FOR OUTPUT KEYS:
-        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server"", ""project""). Do NOT invent new keys.
+        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
         2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
         3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
         4. Extract the specific value mentioned for the criterion. For string fields, use a substring or keyword (not the full value) for fuzzy search, and use '%' as a wildcard.
-        5. For OR logic, use an array of patterns for a key: { ""data.purpose"": [""%corelight%"", ""%sensor%""] }
+        5. For OR logic, use an array of patterns for a key: { ""data.server_purpose"": [""%corelight%"", ""%sensor%""] }
         6. Focus on return as many potential records as you can while narrowing as much as you can.  be optimistic not pessimistic.
         7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
 
         FORMAT:
-        Format the output STRICTLY as a JSON object containing the identified key-value pairs.
-        DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON structure.
+        Format the output STRICTLY as a JSON array of up to 5 filter templates (each a JSON object as described above).
+        DO NOT use backticks in the response. Output MUST be a pure, correctly formatted JSON array.
 
         EXAMPLES:
         Question: Show me production servers.
-        Output: {""data.environment"": ""%product%""}
+        Output: [{{""data.environment"": ""%product%""}}]
 
         Question: List all servers for the 'Phoenix' or 'Austin' project.
-        Output: {""project"": [""phoenix%"", ""austin%""]}
+        Output: [{{""project"": [""phoenix%"", ""austin%""]}}]
 
         Question: What is the server purpose for VAXVNAGG01?
-        Output: {""data.name"": ""%vaxv%""}
+        Output: [{{""data.name"": ""%vaxv%""}}]
 
         Question: Tell me about the system architecture.
-        Output: {}
+        Output: [{{}}]
 
         Question: {{$input}}
         Output:
@@ -359,142 +260,206 @@ Dataset:";
                 var filterJson = filterResult.GetValue<string>()?.Trim();
                 Console.WriteLine($"LLM Normalized Filter Suggestion: {filterJson}"); // Debug output
 
+                List<MemoryFilter> allFilters = new List<MemoryFilter>();
+
                 if (!string.IsNullOrWhiteSpace(filterJson) && filterJson != "{}")
                 {
-                    // Deserialize as Dictionary<string, object> to handle both string and array values
-                    var filterDict = JsonSerializer.Deserialize<Dictionary<string, object>>(filterJson);
-                    if (filterDict != null && filterDict.Count > 0)
+                    // Try to parse as an array of filter templates
+                    try
                     {
-                        // Convert values to object or List<object> for validation
-                        var paramDict = new Dictionary<string, object>();
-                        foreach (var kvp in filterDict)
+                        var filterTemplates = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(filterJson);
+                        if (filterTemplates != null && filterTemplates.Count > 0)
                         {
-                            if (kvp.Value is JsonElement elem)
+                            foreach (var filterDict in filterTemplates)
                             {
-                                if (elem.ValueKind == JsonValueKind.String)
+                                if (filterDict == null || filterDict.Count == 0) continue;
+                                var paramDict = new Dictionary<string, object>();
+                                foreach (var kvp in filterDict)
                                 {
-                                    paramDict[kvp.Key] = elem.GetString();
-                                }
-                                else if (elem.ValueKind == JsonValueKind.Array)
-                                {
-                                    var list = new List<string>();
-                                    foreach (var item in elem.EnumerateArray())
+                                    if (kvp.Value is JsonElement elem)
                                     {
-                                        if (item.ValueKind == JsonValueKind.String)
-                                            list.Add(item.GetString());
+                                        if (elem.ValueKind == JsonValueKind.String)
+                                        {
+                                            paramDict[kvp.Key] = elem.GetString();
+                                        }
+                                        else if (elem.ValueKind == JsonValueKind.Array)
+                                        {
+                                            var list = new List<string>();
+                                            foreach (var item in elem.EnumerateArray())
+                                            {
+                                                if (item.ValueKind == JsonValueKind.String)
+                                                    list.Add(item.GetString());
+                                            }
+                                            paramDict[kvp.Key] = list;
+                                        }
                                     }
-                                    paramDict[kvp.Key] = list;
+                                    else if (kvp.Value is string s)
+                                    {
+                                        paramDict[kvp.Key] = s;
+                                    }
+                                    else if (kvp.Value is IEnumerable<object> objList)
+                                    {
+                                        paramDict[kvp.Key] = objList.ToList();
+                                    }
+                                    else
+                                    {
+                                        paramDict[kvp.Key] = kvp.Value;
+                                    }
                                 }
-                                // Optionally handle other types (numbers, bools) if needed
-                            }
-                            else if (kvp.Value is string s)
-                            {
-                                paramDict[kvp.Key] = s;
-                            }
-                            else if (kvp.Value is IEnumerable<object> objList)
-                            {
-                                paramDict[kvp.Key] = objList.ToList();
-                            }
-                            else
-                            {
-                                paramDict[kvp.Key] = kvp.Value;
+
+                                // Validate parameters against schema if available
+                                MemoryFilter filter = null;
+                                if (!string.IsNullOrEmpty(datasetName))
+                                {
+                                    try
+                                    {
+                                        TabularFilterHelper filterHelper;
+                                        if (_tabularMemoryDb != null)
+                                        {
+                                            filterHelper = new TabularFilterHelper(_tabularMemoryDb);
+                                        }
+                                        else
+                                        {
+                                            filterHelper = new TabularFilterHelper(_memory, _indexName);
+                                        }
+                                        var result = await filterHelper.GenerateValidatedFilterAsync(datasetName, paramDict);
+                                        filter = result.Filter;
+                                        warnings.AddRange(result.Warnings);
+                                    }
+                                    catch
+                                    {
+                                        filter = null;
+                                    }
+                                }
+                                if (filter == null)
+                                {
+                                    filter = new MemoryFilter();
+                                    foreach (var kvp in paramDict)
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
+                                        {
+                                            if (kvp.Value is string s)
+                                            {
+                                                filter.Add(kvp.Key, s);
+                                            }
+                                            else if (kvp.Value is List<string> slist)
+                                            {
+                                                filter.Add(kvp.Key, slist);
+                                            }
+                                            else if (kvp.Value is IEnumerable<object> objList)
+                                            {
+                                                var strList = objList.Select(x => x?.ToString() ?? "").ToList();
+                                                filter.Add(kvp.Key, strList);
+                                            }
+                                            else
+                                            {
+                                                filter.Add(kvp.Key, kvp.Value.ToString() ?? "");
+                                            }
+                                        }
+                                    }
+                                }
+                                allFilters.Add(filter);
                             }
                         }
-
-                        // If we have a dataset name, validate parameters against schema
-                        if (!string.IsNullOrEmpty(datasetName))
+                    }
+                    catch
+                    {
+                        // Fallback: try to parse as a single filter template (object)
+                        var filterDict = JsonSerializer.Deserialize<Dictionary<string, object>>(filterJson);
+                        if (filterDict != null && filterDict.Count > 0)
                         {
-                            try
+                            var paramDict = new Dictionary<string, object>();
+                            foreach (var kvp in filterDict)
                             {
-                                // Create a TabularFilterHelper with the memory instance provided in constructor if available
-                                TabularFilterHelper filterHelper;
-                                if (_tabularMemoryDb != null)
+                                if (kvp.Value is JsonElement elem)
                                 {
-                                    Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
-                                    filterHelper = new TabularFilterHelper(_tabularMemoryDb);
+                                    if (elem.ValueKind == JsonValueKind.String)
+                                    {
+                                        paramDict[kvp.Key] = elem.GetString();
+                                    }
+                                    else if (elem.ValueKind == JsonValueKind.Array)
+                                    {
+                                        var list = new List<string>();
+                                        foreach (var item in elem.EnumerateArray())
+                                        {
+                                            if (item.ValueKind == JsonValueKind.String)
+                                                list.Add(item.GetString());
+                                        }
+                                        paramDict[kvp.Key] = list;
+                                    }
+                                }
+                                else if (kvp.Value is string s)
+                                {
+                                    paramDict[kvp.Key] = s;
+                                }
+                                else if (kvp.Value is IEnumerable<object> objList)
+                                {
+                                    paramDict[kvp.Key] = objList.ToList();
                                 }
                                 else
                                 {
-                                    // Fall back to the original approach with reflection
-                                    filterHelper = new TabularFilterHelper(_memory, _indexName);
-                                }
-                                var result = await filterHelper.GenerateValidatedFilterAsync(
-                                    datasetName, paramDict);
-
-                                generatedFilter = result.Filter;
-                                warnings.AddRange(result.Warnings);
-
-                                if (result.Warnings.Count > 0)
-                                {
-                                    Console.WriteLine("Validation warnings:");
-                                    foreach (var warning in result.Warnings)
-                                    {
-                                        Console.WriteLine($"  - {warning}");
-                                    }
+                                    paramDict[kvp.Key] = kvp.Value;
                                 }
                             }
-                            catch (Exception ex)
+                            MemoryFilter filter = null;
+                            if (!string.IsNullOrEmpty(datasetName))
                             {
-                                Console.WriteLine($"Error during parameter validation: {ex.Message}");
-
-                                // Fall back to unvalidated filter
-                                generatedFilter = new MemoryFilter();
+                                try
+                                {
+                                    TabularFilterHelper filterHelper;
+                                    if (_tabularMemoryDb != null)
+                                    {
+                                        filterHelper = new TabularFilterHelper(_tabularMemoryDb);
+                                    }
+                                    else
+                                    {
+                                        filterHelper = new TabularFilterHelper(_memory, _indexName);
+                                    }
+                                    var result = await filterHelper.GenerateValidatedFilterAsync(datasetName, paramDict);
+                                    filter = result.Filter;
+                                    warnings.AddRange(result.Warnings);
+                                }
+                                catch
+                                {
+                                    filter = null;
+                                }
+                            }
+                            if (filter == null)
+                            {
+                                filter = new MemoryFilter();
                                 foreach (var kvp in paramDict)
                                 {
                                     if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
                                     {
                                         if (kvp.Value is string s)
                                         {
-                                            generatedFilter.Add(kvp.Key, s);
+                                            filter.Add(kvp.Key, s);
                                         }
                                         else if (kvp.Value is List<string> slist)
                                         {
-                                            generatedFilter.Add(kvp.Key, slist);
+                                            filter.Add(kvp.Key, slist);
                                         }
                                         else if (kvp.Value is IEnumerable<object> objList)
                                         {
                                             var strList = objList.Select(x => x?.ToString() ?? "").ToList();
-                                            generatedFilter.Add(kvp.Key, strList);
+                                            filter.Add(kvp.Key, strList);
                                         }
                                         else
                                         {
-                                            generatedFilter.Add(kvp.Key, kvp.Value.ToString() ?? "");
+                                            filter.Add(kvp.Key, kvp.Value.ToString() ?? "");
                                         }
                                     }
                                 }
                             }
+                            allFilters.Add(filter);
                         }
-                        else
-                        {
-                            // No dataset identified, use unvalidated filter
-                            generatedFilter = new MemoryFilter();
-                            foreach (var kvp in paramDict)
-                            {
-                                if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
-                                {
-                                    if (kvp.Value is string s)
-                                    {
-                                        generatedFilter.Add(kvp.Key, s);
-                                    }
-                                    else if (kvp.Value is List<string> slist)
-                                    {
-                                        generatedFilter.Add(kvp.Key, slist);
-                                    }
-                                    else if (kvp.Value is IEnumerable<object> objList)
-                                    {
-                                        var strList = objList.Select(x => x?.ToString() ?? "").ToList();
-                                        generatedFilter.Add(kvp.Key, strList);
-                                    }
-                                    else
-                                    {
-                                        generatedFilter.Add(kvp.Key, kvp.Value.ToString() ?? "");
-                                    }
-                                }
-                            }
-                        }
-
-                        Console.WriteLine($"Applied Filter: {JsonSerializer.Serialize(generatedFilter)}"); // Debug output
                     }
+                }
+
+                // If no filters were parsed, fallback to an empty filter
+                if (allFilters.Count == 0)
+                {
+                    allFilters.Add(new MemoryFilter());
                 }
             }
             catch (Exception ex)
@@ -659,6 +624,114 @@ Dataset:";
             // Add any other known standard tags if applicable
 
             return sb.ToString();
+        }
+
+        // New helper method to fetch schema and formatted schema info
+        private async Task<(TabularDataSchema?, string)> GetSchemaInfoAsync(string datasetName)
+        {
+            TabularDataSchema? schema = null;
+            string formattedSchemaInfo = "No schema information available for filter generation."; // Default
+            if (!string.IsNullOrEmpty(datasetName))
+            {
+                Console.WriteLine($"--- Fetching Schema for: {datasetName} ---");
+                try
+                {
+                    TabularFilterHelper schemaHelper;
+                    if (_tabularMemoryDb != null)
+                    {
+                        Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
+                        schemaHelper = new TabularFilterHelper(_tabularMemoryDb);
+                    }
+                    else
+                    {
+                        schemaHelper = new TabularFilterHelper(_memory, _indexName);
+                    }
+                    schema = await schemaHelper.GetSchemaAsync(datasetName);
+                    if (schema != null)
+                    {
+                        formattedSchemaInfo = FormatSchemaForPrompt(schema);
+                        Console.WriteLine($"Schema Info Found:\n{formattedSchemaInfo}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Schema object not found for dataset: {datasetName}");
+                        formattedSchemaInfo = $"Schema object not found for dataset '{datasetName}'. Cannot provide specific field info.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error fetching schema for dataset {datasetName}: {ex.Message}");
+                    formattedSchemaInfo = $"Error fetching schema for dataset '{datasetName}'. Cannot provide specific field info.";
+                }
+            }
+            else
+            {
+                Console.WriteLine("No dataset identified, skipping schema fetch.");
+            }
+            return (schema, formattedSchemaInfo);
+        }
+
+        // New helper method to get dataset name
+        private async Task<string> GetDatasetNameAsync(string question)
+        {
+            try
+            {
+                TabularFilterHelper filterHelper;
+                if (_tabularMemoryDb != null)
+                {
+                    Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
+                    filterHelper = new TabularFilterHelper(_tabularMemoryDb);
+                }
+                else
+                {
+                    filterHelper = new TabularFilterHelper(_memory, _indexName);
+                }
+
+                var datasetList = await filterHelper.ListDatasetNamesAsync();
+
+                if (datasetList.Count > 0)
+                {
+                    string datasetPromptTemplate = @"
+You are analyzing a user query to determine which dataset it is most likely referring to.
+
+Available datasets:
+{{$datasets}}
+
+User query: {{$query}}
+
+Analyze the query and determine which dataset it is most likely referring to.
+Return ONLY the name of the most relevant dataset. If no dataset seems relevant, return 'none'.
+
+Dataset:";
+
+                    var datasetFunction = _kernel.CreateFunctionFromPrompt(
+                        datasetPromptTemplate,
+                        new OpenAIPromptExecutionSettings { Temperature = 0.0 });
+
+                    var datasetResult = await _kernel.InvokeAsync(datasetFunction, new KernelArguments
+                    {
+                        ["datasets"] = string.Join("\n", datasetList.Select(d => $"- {d}")),
+                        ["query"] = question
+                    });
+
+                    var datasetName = datasetResult.GetValue<string>()?.Trim();
+
+                    if (string.IsNullOrEmpty(datasetName) || datasetName.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return string.Empty;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Identified dataset: {datasetName}");
+                        return datasetName;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during dataset identification: {ex.Message}");
+            }
+            return string.Empty;
         }
     }
 }
