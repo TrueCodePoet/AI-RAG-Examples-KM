@@ -697,18 +697,43 @@ public class KernelMemoryQueryProcessor
                     filterHelper = new TabularFilterHelper(_memory, _indexName);
                 }
 
-                var datasetList = await filterHelper.ListDatasetNamesAsync();
+                // Fetch all schemas, not just names
+                var schemas = await filterHelper.ListSchemasAsync();
 
-                if (datasetList.Count > 0)
+                if (schemas.Count > 0)
                 {
-                    string datasetPromptTemplate = 
+                    // Build detailed schema context
+                    var sb = new StringBuilder();
+                    foreach (var schema in schemas)
+                    {
+                        sb.AppendLine($"Dataset: {schema.DatasetName}");
+                        if (schema.Columns != null && schema.Columns.Count > 0)
+                        {
+                            sb.AppendLine("  Fields:");
+                            foreach (var col in schema.Columns)
+                            {
+                                sb.Append($"    - {col.NormalizedName}");
+                                if (col.CommonValues != null && col.CommonValues.Count > 0)
+                                {
+                                    var examples = string.Join(", ", col.CommonValues.Take(3).Select(v => $"\"{v}\""));
+                                    sb.Append($" (e.g., {examples})");
+                                }
+                                sb.AppendLine();
+                            }
+                        }
+                        sb.AppendLine();
+                    }
+                    string detailedSchemaContext = sb.ToString();
+
+                    string datasetPromptTemplate =
 @"You are analyzing a user query to determine which dataset (schema) it is most likely referring to.
 
-Available datasets (with example fields): {{$datasets}}
+Available datasets and their fields:
+{{$detailedSchemas}}
 
 User query: {{$query}}
 
-Analyze the query and determine which dataset(s) it is most likely referring to. Consider both the dataset name and any available schema field names or examples.
+Analyze the query and determine which dataset(s) it is most likely referring to. Consider both the dataset name and the available schema field names and example values.
 Return a JSON array of up to 3 candidate dataset names, ordered from most to least likely. If no dataset seems relevant, return an empty array [].
 
 FORMAT:
@@ -741,20 +766,35 @@ Output:
 
                     var datasetResult = await _kernel.InvokeAsync(datasetFunction, new KernelArguments
                     {
-                        ["datasets"] = string.Join("\n", datasetList.Select(d => $"- {d}")),
+                        ["detailedSchemas"] = detailedSchemaContext,
                         ["query"] = question
                     });
 
-                    var datasetName = datasetResult.GetValue<string>()?.Trim();
-
-                    if (string.IsNullOrEmpty(datasetName) || datasetName.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    var datasetArrayJson = datasetResult.GetValue<string>()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(datasetArrayJson))
                     {
-                        return string.Empty;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Identified dataset: {datasetName}");
-                        return datasetName;
+                        try
+                        {
+                            var datasetArray = JsonSerializer.Deserialize<List<string>>(datasetArrayJson);
+                            if (datasetArray != null && datasetArray.Count > 0)
+                            {
+                                var datasetName = datasetArray[0];
+                                if (!string.IsNullOrEmpty(datasetName) && !datasetName.Equals("none", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    Console.WriteLine($"Identified dataset: {datasetName}");
+                                    return datasetName;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Fallback: treat as a single string
+                            if (!string.IsNullOrEmpty(datasetArrayJson) && !datasetArrayJson.Equals("none", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Console.WriteLine($"Identified dataset: {datasetArrayJson}");
+                                return datasetArrayJson;
+                            }
+                        }
                     }
                 }
             }
