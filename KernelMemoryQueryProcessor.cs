@@ -506,16 +506,15 @@ Dataset:";
             string sources = "";
 
             // Set a high limit (or no limit) for retrieving results from the database
-            int dbQueryLimit = resultLimit.HasValue && resultLimit.Value > 0 ? Math.Max(resultLimit.Value, 100) : 100;
+            int dbQueryLimit = resultLimit.HasValue && resultLimit.Value > 0 ? resultLimit.Value : 100;
             Console.WriteLine($"Database query limit configured to: {dbQueryLimit}"); 
             
             // Use SearchAsync instead of AskAsync to get more control over the results
-            // We'll still use AskAsync for the synthesis but get the raw data first
             var searchResults = await _memory.SearchAsync(
                 question, 
                 index: _indexName, 
                 filter: generatedFilter, 
-                limit: dbQueryLimit // SearchAsync does support the limit parameter
+                limit: dbQueryLimit
             );
             
             Console.WriteLine($"Search returned {searchResults.Results.Count} results");
@@ -528,7 +527,6 @@ Dataset:";
                 string docId = doc.DocumentId ?? "N/A";
                 string lastUpdate = doc.Partitions.FirstOrDefault()?.LastUpdate.ToString("d") ?? "N/A";
                 string link = doc.Link ?? "";
-                // Collect all partition texts for this record
                 var partitionTexts = doc.Partitions != null
                     ? string.Join("\n      ", doc.Partitions.Select(p => p.Text))
                     : "";
@@ -537,27 +535,9 @@ Dataset:";
             
             Console.WriteLine("--- First query was for raw search data. Now executing AskAsync for answer synthesis. ---");
             
-            // Investigation: The two queries with different limits come from:
-            // 1. Our explicit SearchAsync above (limit: dbQueryLimit = 1000)
-            // 2. The internal SearchAsync called by AskAsync below (which defaults to 5)
-            
-            // The mystery is now solved! We can't avoid this because:
-            // 1. SearchAsync is called by us with limit=1000
-            // 2. AskAsync internally calls SearchAsync again with its default limit=5
-            
-            // Use the standard AskAsync method with just the filter
-            var answer = await _memory.AskAsync(
-                question, 
-                index: _indexName, 
-                filter: generatedFilter
-            );
-            
-            // Note: Even though AskAsync's internal search uses limit=5,
-            // the searchResults variable above contains all 1000 results,
-            // so we still have access to all the data for debugging
-            
-            // Apply result limit if specified (client-side filtering)
-            var relevantSources = answer.RelevantSources;
+            // Use the standard AskAsync method with just the filter and limit
+            // Instead, synthesize the answer using the top N results from SearchAsync
+            var relevantSources = searchResults.Results;
             if (resultLimit.HasValue && resultLimit.Value > 0 && relevantSources.Count > resultLimit.Value)
             {
                 Console.WriteLine($"Limiting displayed results to {resultLimit.Value} (from {relevantSources.Count} total)");
@@ -567,14 +547,13 @@ Dataset:";
             {
                 Console.WriteLine($"Total results retrieved: {relevantSources.Count}");
             }
-         
+
             foreach (var x in relevantSources)
             {
-                // Attempt to get the original file name if available
                 string sourceName = x.SourceName;
                 List<string?> fileTagValue = null;
                 x.Partitions.FirstOrDefault()?.Tags.TryGetValue("file", out fileTagValue);
-         
+
                 foreach (var partition in x.Partitions)
                 {
                     if (partition.Tags != null &&
@@ -586,10 +565,10 @@ Dataset:";
                         break;
                     }
                 }
-         
+
                 sources += $"  - {sourceName} (Partition: {x.DocumentId ?? "N/A"}) Link: {x.Link} [{x.Partitions.First().LastUpdate:D}]" + Environment.NewLine;
             }
-         
+
             // --- Final Answer Synthesis Step ---
             Console.WriteLine("\n--- Synthesizing Final Answer ---");
             var skPrompt = $@"
@@ -600,7 +579,7 @@ Dataset:";
             {allRawResults}
             End Documents -----------
 
-        Kernel Memory Answer: {answer.Result}
+        Kernel Memory Answer: [Results synthesized from top {relevantSources.Count} records]
          
         Kernel Memory Sources:
         {sources}
@@ -614,19 +593,19 @@ Dataset:";
          
         Make sure to include the document name and reference id if available from the sources provided.
         ";
-         
+
             Microsoft.SemanticKernel.Connectors.AzureOpenAI.AzureOpenAIPromptExecutionSettings settings = new()
             {
                 // ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions // Enable if SK_Prompt uses tools
             };
-         
+
             KernelArguments arguments = new KernelArguments(settings)
                         {
                             { "input", question }, // Pass original question again if needed by the prompt
                         };
-         
+
             var response = await _kernel.InvokePromptAsync(skPrompt, arguments);
-         
+
             Console.WriteLine("\n--- Final Response ---");
             Console.WriteLine(response.GetValue<string>());
             Console.WriteLine("\nPress Enter to exit.");

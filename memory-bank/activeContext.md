@@ -63,6 +63,7 @@ The project is currently focused on implementing and testing the tabular data pr
   - A runtime log message confirms when the DI path is used and reflection is skipped.
   - Reflection-based fallback is only used if DI is not available, and will be removed after full validation.
   - This change makes the system robust to future changes in Kernel Memory internals and improves maintainability.
+  - **Lesson learned (2025-04-17):** The KernelMemoryBuilder API does not expose the main IServiceCollection, so we used reflection to access the private `_memoryServiceCollection` field and build a ServiceProvider to extract the IMemoryDb instance for DI. This workaround is necessary until the upstream library exposes a public property or method for this purpose. The approach is now working and enables full schema-aware DI in the application.
 
 ### Fuzzy Matching, AND/OR Query Logic, and Dynamic AI Prompting
 - **FuzzyMatch configuration is now fully supported and configurable via appsettings.json**:
