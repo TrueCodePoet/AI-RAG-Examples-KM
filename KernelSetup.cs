@@ -165,32 +165,41 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
                 Console.WriteLine("* Skipping TextPartitioningHandler for tabular pipeline");
             }
 
-            // Retrieve the IMemoryDb instance from the DI service provider
+            // Retrieve the IMemoryDb instance from the DI service provider (reflection workaround)
             IMemoryDb? memoryDb = null;
             try
             {
-                var serviceCollection = builder.Services.OfType<Microsoft.Extensions.DependencyInjection.IServiceCollection>().FirstOrDefault();
-                if (serviceCollection == null)
+                var builderType = builder.GetType();
+                var memoryServiceCollectionField = builderType.GetField("_memoryServiceCollection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (memoryServiceCollectionField == null)
                 {
-                    Console.WriteLine("ERROR: Could not retrieve IServiceCollection from builder.Services.");
+                    Console.WriteLine("ERROR: Could not find _memoryServiceCollection field in KernelMemoryBuilder.");
                 }
                 else
                 {
-                    var serviceProvider = serviceCollection.BuildServiceProvider();
-                    memoryDb = serviceProvider.GetService<IMemoryDb>();
-                    if (memoryDb != null)
+                    var serviceCollection = memoryServiceCollectionField.GetValue(builder) as Microsoft.Extensions.DependencyInjection.IServiceCollection;
+                    if (serviceCollection == null)
                     {
-                        Console.WriteLine($"Successfully retrieved IMemoryDb from DI: {memoryDb.GetType().FullName}");
+                        Console.WriteLine("ERROR: Could not retrieve IServiceCollection from _memoryServiceCollection field.");
                     }
                     else
                     {
-                        Console.WriteLine("WARNING: IMemoryDb could not be retrieved from DI service provider.");
+                        var serviceProvider = serviceCollection.BuildServiceProvider();
+                        memoryDb = serviceProvider.GetService<IMemoryDb>();
+                        if (memoryDb != null)
+                        {
+                            Console.WriteLine($"Successfully retrieved IMemoryDb from DI (reflection): {memoryDb.GetType().FullName}");
+                        }
+                        else
+                        {
+                            Console.WriteLine("WARNING: IMemoryDb could not be retrieved from DI service provider (reflection).");
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR retrieving IMemoryDb from DI: {ex.Message}");
+                Console.WriteLine($"ERROR retrieving IMemoryDb from DI (reflection): {ex.Message}");
             }
 
             return (memory, memoryDb);
