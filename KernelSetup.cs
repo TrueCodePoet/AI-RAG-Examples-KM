@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.KernelMemory;
 using Microsoft.KernelMemory.AI.AzureOpenAI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDb; // Added for WithAzureCosmosDbMemory extension method
 using Microsoft.KernelMemory.MemoryStorage; // For IMemoryDb
@@ -153,13 +154,6 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
             var memory = builder.Build<MemoryServerless>(
                 new KernelMemoryBuilderBuildOptions { AllowMixingVolatileAndPersistentData = true });
 
-            //Console.WriteLine($"* Registering pipeline handlers for {(useTabularPipeline ? "tabular" : "standard")} pipeline...");
-            // Common handlers for both pipelines
-            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.TextExtractionHandler>("extract_text");
-            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.GenerateEmbeddingsHandler>("generate_embeddings");
-            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SummarizationHandler>("summarize_data");
-            //memory.Orchestrator.AddHandler<Microsoft.KernelMemory.Handlers.SaveRecordsHandler>("save_current_records");
-
             // Only add TextPartitioningHandler for standard pipeline
             if (!useTabularPipeline)
             {
@@ -171,33 +165,32 @@ namespace AI_RAG_Examples_KM // Assuming this is the namespace based on project 
                 Console.WriteLine("* Skipping TextPartitioningHandler for tabular pipeline");
             }
 
-            // Extract the IMemoryDb instance using reflection (temporary, until DI is fully supported)
+            // Retrieve the IMemoryDb instance from the DI service provider
             IMemoryDb? memoryDb = null;
             try
             {
-                var memoryType = memory.GetType();
-                var memoryDbField = memoryType.GetField("_memoryDb", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (memoryDbField != null)
+                var serviceCollection = builder.Services.OfType<Microsoft.Extensions.DependencyInjection.IServiceCollection>().FirstOrDefault();
+                if (serviceCollection == null)
                 {
-                    var dbValue = memoryDbField.GetValue(memory);
-                    if (dbValue is IMemoryDb dbInstance)
-                    {
-                        memoryDb = dbInstance;
-                        Console.WriteLine($"Successfully extracted IMemoryDb of type: {memoryDb.GetType().FullName}");
-                    }
-                    else
-                    {
-                        Console.WriteLine("WARNING: _memoryDb field exists but is not IMemoryDb");
-                    }
+                    Console.WriteLine("ERROR: Could not retrieve IServiceCollection from builder.Services.");
                 }
                 else
                 {
-                    Console.WriteLine("WARNING: Could not find _memoryDb field in MemoryServerless instance");
+                    var serviceProvider = serviceCollection.BuildServiceProvider();
+                    memoryDb = serviceProvider.GetService<IMemoryDb>();
+                    if (memoryDb != null)
+                    {
+                        Console.WriteLine($"Successfully retrieved IMemoryDb from DI: {memoryDb.GetType().FullName}");
+                    }
+                    else
+                    {
+                        Console.WriteLine("WARNING: IMemoryDb could not be retrieved from DI service provider.");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR extracting IMemoryDb: {ex.Message}");
+                Console.WriteLine($"ERROR retrieving IMemoryDb from DI: {ex.Message}");
             }
 
             return (memory, memoryDb);
