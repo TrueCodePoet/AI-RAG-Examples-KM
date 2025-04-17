@@ -11,17 +11,20 @@ namespace AI_RAG_Examples_KM
         private readonly BlobStorageSettings _blobSettings;
         private readonly string _indexName;
         private readonly string _localDownloadPath;
+        private readonly IMemoryDb? _memoryDb; // Optional for DI
 
         public BlobStorageProcessor(
             IKernelMemory memory, 
             BlobStorageSettings blobSettings, 
             string indexName,
-            string localDownloadPath)
+            string localDownloadPath,
+            IMemoryDb? memoryDb = null)
         {
             _memory = memory;
             _blobSettings = blobSettings;
             _indexName = indexName;
             _localDownloadPath = localDownloadPath;
+            _memoryDb = memoryDb;
         }
 
         // Method 1: Process blobs from Azure Blob Storage

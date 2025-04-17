@@ -59,8 +59,9 @@ The project is currently focused on implementing and testing the tabular data pr
 - **Replaced reflection-based IMemoryDb access with DI-based approach**:
   - `KernelInitializer.InitializeMemory` now returns both `IKernelMemory` and `IMemoryDb` directly.
   - `Program.cs` and all consumers now receive the `IMemoryDb` instance via DI, not reflection.
-  - Removed all usage of `MemoryHelper.GetMemoryDbFromKernelMemory` from the main workflow.
-  - Legacy reflection logic is now deprecated and only present for backward compatibility.
+  - `BlobStorageProcessor` and `KernelMemoryQueryProcessor` are now explicitly constructed with the DI-injected `IMemoryDb` instance.
+  - A runtime log message confirms when the DI path is used and reflection is skipped.
+  - Reflection-based fallback is only used if DI is not available, and will be removed after full validation.
   - This change makes the system robust to future changes in Kernel Memory internals and improves maintainability.
 
 ### Fuzzy Matching, AND/OR Query Logic, and Dynamic AI Prompting

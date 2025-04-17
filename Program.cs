@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.KernelMemory;
+﻿﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -72,7 +72,8 @@ var tabularFileProcessor = new BlobStorageProcessor(
     tabularMemory,
     appConfig.BlobStorageSettings,
     TabularIndexName,
-    LocalDownloadPath);
+    LocalDownloadPath,
+    tabularMemoryDb);
 
 var standardFileProcessor = new BlobStorageProcessor(
     standardMemory,

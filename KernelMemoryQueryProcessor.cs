@@ -147,6 +147,7 @@ public class KernelMemoryQueryProcessor
                 TabularFilterHelper filterHelper;
                 if (_tabularMemoryDb != null)
                 {
+                    Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
                     filterHelper = new TabularFilterHelper(_tabularMemoryDb);
                 }
                 else
@@ -214,6 +215,7 @@ Dataset:";
                     TabularFilterHelper schemaHelper;
                     if (_tabularMemoryDb != null)
                     {
+                        Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
                         schemaHelper = new TabularFilterHelper(_tabularMemoryDb);
                     }
                     else
@@ -406,6 +408,7 @@ Dataset:";
                                 TabularFilterHelper filterHelper;
                                 if (_tabularMemoryDb != null)
                                 {
+                                    Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped).");
                                     filterHelper = new TabularFilterHelper(_tabularMemoryDb);
                                 }
                                 else
