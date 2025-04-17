@@ -166,11 +166,11 @@ public class KernelMemoryQueryProcessor
         {{$schemaInfo}}
 
         RULES FOR OUTPUT KEYS:
-        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server_purpose"", ""project""). Do NOT invent new keys.
+        1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server"", ""project""). Do NOT invent new keys.
         2. If a criterion refers to a structured data column, use the corresponding ""data.*"" key from the schema.
         3. If a criterion refers to a general category or context, use the corresponding standard tag key from the schema (e.g., ""project"").
         4. Extract the specific value mentioned for the criterion. For string fields, use a substring or keyword (not the full value) for fuzzy search, and use '%' as a wildcard.
-        5. For OR logic, use an array of patterns for a key: { ""data.server_purpose"": [""%corelight%"", ""%sensor%""] }
+        5. For OR logic, use an array of patterns for a key: { ""data.purpose"": [""%corelight%"", ""%sensor%""] }
         6. Focus on return as many potential records as you can while narrowing as much as you can.  be optimistic not pessimistic.
         7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
 
@@ -180,16 +180,16 @@ public class KernelMemoryQueryProcessor
 
         EXAMPLES:
         Question: Show me production servers.
-        Output: [{{""data.environment"": ""%product%""}}]
+        Output: [{""data.environment"": ""%product%""}]
 
         Question: List all servers for the 'Phoenix' or 'Austin' project.
-        Output: [{{""project"": [""phoenix%"", ""austin%""]}}]
+        Output: [{""project"": [""phoenix%"", ""austin%""]}]
 
         Question: What is the server purpose for VAXVNAGG01?
-        Output: [{{""data.name"": ""%vaxv%""}}]
+        Output: [{""data.name"": ""%vaxv%""}]
 
         Question: Tell me about the system architecture.
-        Output: [{{}}]
+        Output: [{}]
 
         Question: {{$input}}
         Output:
