@@ -247,6 +247,8 @@ public class KernelMemoryQueryProcessor
             MemoryFilter? generatedFilter = null;
             List<string> warnings = new List<string>();
             
+            // Prepare to collect all filters outside the try block
+            List<MemoryFilter> allFilters = new List<MemoryFilter>();
             try
             {
                 // Inject schema info into the arguments
@@ -260,8 +262,7 @@ public class KernelMemoryQueryProcessor
                 var filterJson = filterResult.GetValue<string>()?.Trim();
                 Console.WriteLine($"LLM Normalized Filter Suggestion: {filterJson}"); // Debug output
 
-                List<MemoryFilter> allFilters = new List<MemoryFilter>();
-
+                // allFilters is now in scope here and after
                 if (!string.IsNullOrWhiteSpace(filterJson) && filterJson != "{}")
                 {
                     // Try to parse as an array of filter templates
@@ -476,37 +477,43 @@ public class KernelMemoryQueryProcessor
             int dbQueryLimit = resultLimit.HasValue && resultLimit.Value > 0 ? resultLimit.Value : 100;
             Console.WriteLine($"Database query limit configured to: {dbQueryLimit}"); 
             
-            // Use SearchAsync instead of AskAsync to get more control over the results
-            var searchResults = await _memory.SearchAsync(
-                question, 
-                index: _indexName, 
-                filter: generatedFilter, 
-                limit: dbQueryLimit
-            );
-            
-            Console.WriteLine($"Search returned {searchResults.Results.Count} results");
-            
+            // Use SearchAsync for each filter template and aggregate results
+            var allResults = new List<Citation>();
+            foreach (var filter in allFilters)
+            {
+                var searchResults = await _memory.SearchAsync(
+                    question,
+                    index: _indexName,
+                    filter: filter,
+                    limit: dbQueryLimit
+                );
+                if (searchResults?.Results != null)
+                    allResults.AddRange(searchResults.Results);
+            }
+            // Deduplicate results by DocumentId (or use another unique property if needed)
+            var relevantSources = allResults
+                .GroupBy(r => r.DocumentId)
+                .Select(g => g.First())
+                .ToList();
+
+            Console.WriteLine($"Aggregated search returned {relevantSources.Count} unique results from {allFilters.Count} filter templates");
+
             // --- Format all raw search results for prompt injection ---
             string allRawResults = "";
             int resultCount = 0;
-            foreach (var doc in searchResults.Results)
+            foreach (var doc in relevantSources)
             {
                 resultCount++;
                 string sourceName = doc.SourceName;
                 string docId = doc.DocumentId ?? "N/A";
-                string lastUpdate = doc.Partitions.FirstOrDefault()?.LastUpdate.ToString("d") ?? "N/A";
+                string lastUpdate = doc.Partitions?.FirstOrDefault()?.LastUpdate.ToString("d") ?? "N/A";
                 string link = doc.Link ?? "";
                 var partitionTexts = doc.Partitions != null
                     ? string.Join("\n      ", doc.Partitions.Select(p => p.Text))
                     : "";
                 allRawResults += $"  - {sourceName} (ID: {docId}) Link: {link} [LastUpdate: {lastUpdate}]\n    Partition Texts:\n   ROW: {resultCount} : {partitionTexts}\n";
             }
-            
-            Console.WriteLine("--- First query was for raw search data. Now executing AskAsync for answer synthesis. ---");
-            
-            // Use the standard AskAsync method with just the filter and limit
-            // Instead, synthesize the answer using the top N results from SearchAsync
-            var relevantSources = searchResults.Results;
+
             if (resultLimit.HasValue && resultLimit.Value > 0 && relevantSources.Count > resultLimit.Value)
             {
                 Console.WriteLine($"Limiting displayed results to {resultLimit.Value} (from {relevantSources.Count} total)");
@@ -521,21 +528,24 @@ public class KernelMemoryQueryProcessor
             {
                 string sourceName = x.SourceName;
                 List<string?> fileTagValue = null;
-                x.Partitions.FirstOrDefault()?.Tags.TryGetValue("file", out fileTagValue);
+                x.Partitions?.FirstOrDefault()?.Tags?.TryGetValue("file", out fileTagValue);
 
-                foreach (var partition in x.Partitions)
+                if (x.Partitions != null)
                 {
-                    if (partition.Tags != null &&
-                        partition.Tags.TryGetValue("file", out var fileTagValues) &&
-                        fileTagValues is not null &&
-                        fileTagValues.Count > 0)
+                    foreach (var partition in x.Partitions)
                     {
-                        sourceName = fileTagValues.First() ?? sourceName;
-                        break;
+                        if (partition.Tags != null &&
+                            partition.Tags.TryGetValue("file", out var fileTagValues) &&
+                            fileTagValues is not null &&
+                            fileTagValues.Count > 0)
+                        {
+                            sourceName = fileTagValues.First() ?? sourceName;
+                            break;
+                        }
                     }
                 }
 
-                sources += $"  - {sourceName} (Partition: {x.DocumentId ?? "N/A"}) Link: {x.Link} [{x.Partitions.First().LastUpdate:D}]" + Environment.NewLine;
+                sources += $"  - {sourceName} (Partition: {x.DocumentId ?? "N/A"}) Link: {x.Link} [{x.Partitions?.FirstOrDefault()?.LastUpdate:D}]" + Environment.NewLine;
             }
 
             // --- Final Answer Synthesis Step ---
