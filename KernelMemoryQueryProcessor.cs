@@ -780,6 +780,7 @@ Output:
                     {
                         try
                         {
+                            // Try to parse as a JSON array and return the first element
                             var datasetArray = JsonSerializer.Deserialize<List<string>>(datasetArrayJson);
                             if (datasetArray != null && datasetArray.Count > 0)
                             {
@@ -793,11 +794,32 @@ Output:
                         }
                         catch
                         {
-                            // Fallback: treat as a single string
-                            if (!string.IsNullOrEmpty(datasetArrayJson) && !datasetArrayJson.Equals("none", StringComparison.OrdinalIgnoreCase))
+                            // Fallback: treat as a single string (strip markdown if present)
+                            var cleaned = datasetArrayJson
+                                .Replace("```json", "", StringComparison.OrdinalIgnoreCase)
+                                .Replace("```", "", StringComparison.OrdinalIgnoreCase)
+                                .Trim();
+                            if (cleaned.StartsWith("["))
                             {
-                                Console.WriteLine($"Identified dataset: {datasetArrayJson}");
-                                return datasetArrayJson;
+                                try
+                                {
+                                    var datasetArray = JsonSerializer.Deserialize<List<string>>(cleaned);
+                                    if (datasetArray != null && datasetArray.Count > 0)
+                                    {
+                                        var datasetName = datasetArray[0];
+                                        if (!string.IsNullOrEmpty(datasetName) && !datasetName.Equals("none", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            Console.WriteLine($"Identified dataset: {datasetName}");
+                                            return datasetName;
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                            if (!string.IsNullOrEmpty(cleaned) && !cleaned.Equals("none", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Console.WriteLine($"Identified dataset: {cleaned}");
+                                return cleaned;
                             }
                         }
                     }
