@@ -145,6 +145,7 @@ public class KernelMemoryQueryProcessor
             TabularDataSchema? schema = null;
             string formattedSchemaInfo = "No schema information available for filter generation."; // Default
             (schema, formattedSchemaInfo) = await GetSchemaInfoAsync(datasetName);
+            Console.WriteLine($"[DEBUG] Injected schema info for prompt:\n{formattedSchemaInfo}");
 
             // --- Filter Generation Step ---
             Console.WriteLine("--- Generating Filters ---");
@@ -238,6 +239,7 @@ public class KernelMemoryQueryProcessor
         ";
             }
 
+            Console.WriteLine($"[DEBUG] Prompt Template :\n{filterPromptTemplate}");
             var generateFiltersFunction = _kernel.CreateFunctionFromPrompt(
                 filterPromptTemplate, functionName: "GenerateNormalizedFilters",
                 description: "Analyzes a user question and generates normalized structured filters as JSON.",
