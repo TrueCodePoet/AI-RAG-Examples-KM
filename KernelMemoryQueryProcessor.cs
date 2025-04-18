@@ -164,7 +164,7 @@ public class KernelMemoryQueryProcessor
         Return your answer as a JSON array of up to 5 filter templates. Each template should be a JSON object as described below.
 
         Available Schema Fields (use these exact keys):
-        {{$schemaInfo}}
+        {formattedSchemaInfo}
 
         RULES FOR OUTPUT KEYS:
         1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server"", ""project""). Do NOT invent new keys.
@@ -206,7 +206,7 @@ public class KernelMemoryQueryProcessor
         For AND logic, include multiple keys in the JSON object (all must match). For OR logic, use an array of values for a key (any value may match).
 
         Available Schema Fields (use these exact keys):
-        {{$schemaInfo}}
+        {formattedSchemaInfo}
 
         RULES FOR OUTPUT KEYS:
         1. Use the EXACT normalized keys provided in the schema info above (e.g., ""data.server"", ""project""). Do NOT invent new keys.
@@ -238,14 +238,17 @@ public class KernelMemoryQueryProcessor
         Output:
         ";
             }
+            filterPromptTemplate = filterPromptTemplate.Replace("{formattedSchemaInfo}", formattedSchemaInfo);
 
             Console.WriteLine($"[DEBUG] Prompt Template :\n{filterPromptTemplate}");
+            
             var generateFiltersFunction = _kernel.CreateFunctionFromPrompt(
                 filterPromptTemplate, functionName: "GenerateNormalizedFilters",
                 description: "Analyzes a user question and generates normalized structured filters as JSON.",
                 executionSettings: new AzureOpenAIPromptExecutionSettings { Temperature = 0.0 }
             );
-         
+            
+
             MemoryFilter? generatedFilter = null;
             List<string> warnings = new List<string>();
             
