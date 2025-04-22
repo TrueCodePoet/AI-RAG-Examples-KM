@@ -15,9 +15,9 @@ namespace AI_RAG_Examples_KM
             string datasetName = await IdentifyDatasetAsync(question);
 
             // --- Fetch Schema Info (if dataset identified) ---
-            TabularDataSchema? schema = null;
-            formattedSchemaInfo = "No schema information available for filter generation."; // Default
-            (schema, formattedSchemaInfo) = await GetSchemaInfoAsync(datasetName);
+            //TabularDataSchema? schema = null;
+            //formattedSchemaInfo = "No schema information available for filter generation."; // Default
+            //(schema, formattedSchemaInfo) = await GetSchemaInfoAsync(datasetName);
             Console.WriteLine($"[DEBUG] Injected schema info for prompt:\n{formattedSchemaInfo}");
 
             // --- Filter Generation Step ---
