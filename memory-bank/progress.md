@@ -40,6 +40,11 @@ The project is in a functional prototype stage, with core components implemented
 - ✅ Filter value type preservation for LIKE/CONTAINS/OR logic: Arrays are now preserved as List<string> and handled robustly in query logic
 - ✅ Consistent Base64 encoding of record IDs
 
+### Code Organization
+- ✅ AzureCosmosDbTabularMemory refactored into partial class files for better organization
+- ✅ KernelMemoryQueryProcessor refactored into partial class files, each with a focused responsibility
+- ✅ Modular design using partial classes to maintain cohesion while reducing file complexity
+
 ### Configuration and Setup
 - ✅ Configuration loading from appsettings.json
 - ✅ Azure service integration (OpenAI, Cosmos DB, Blob Storage)
@@ -59,6 +64,11 @@ The project is in a functional prototype stage, with core components implemented
 - ❌ Hardcoding fuzzy match logic or prompt instructions leads to mismatches and confusion.
   - **Lesson:** Always read operator/config from appsettings.json and dynamically adapt the AI prompt and backend logic.
   - **Status:** Now fully dynamic and robust; prompt and backend always match config.
+
+### Semantic Kernel Version Compatibility
+- ❌ Different versions of Semantic Kernel have incompatible APIs, particularly around ToolCallBehavior and other enums.
+  - **Lesson:** Avoid direct references to enum values when possible, and use more general approaches that work across versions.
+  - **Status:** Fixed by simplifying the AskQuestion implementation to avoid problematic dependencies.
 
 ## What's Left to Build
 
@@ -235,6 +245,7 @@ The project is in a functional prototype stage, with core components implemented
 | 2025-04-16 | Implemented TabularCsvDecoder | Completed |
 | 2025-04-16 | Fixed Base64 ID encoding issue | Completed |
 | 2025-04-16 | Added CSV row skipping diagnostics | Completed |
+| 2025-04-22 | Refactored KernelMemoryQueryProcessor into partial class files | Completed |
 | 2025-04-16 | End-to-end testing (Excel & CSV) | In Progress |
 | 2025-04-16 | Fixed filter value type preservation for LIKE/CONTAINS/OR logic (arrays as List<string>, robust query handling) | Completed |
 | 2025-04-18 | Performance optimization | Not Started |
@@ -257,7 +268,7 @@ The project is in a functional prototype stage, with core components implemented
    - Improve query execution efficiency
    - Implement caching strategies
 
-3. **Create documentation and examples** (Target: 2025-04-25)
+4. **Create documentation and examples** (Target: 2025-04-25)
    - Developer documentation
    - Usage examples
    - Performance guidelines

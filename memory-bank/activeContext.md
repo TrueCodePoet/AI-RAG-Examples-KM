@@ -21,6 +21,16 @@ The project is currently focused on implementing and testing the tabular data pr
   - Created `AzureCosmosDbTabularMemory.SchemaOperations.cs` - Schema creation and manipulation
   - Created `AzureCosmosDbTabularMemory.SchemaRecord.cs` - Record-schema relationships
   - Created `AzureCosmosDbTabularMemory.Utilities.cs` - Helper methods like normalization and type inference
+- Refactored the large `KernelMemoryQueryProcessor.cs` file into multiple partial class files for better organization:
+  - Created `KernelMemoryQueryProcessor.cs` - Core class with fields and constructor
+  - Created `KernelMemoryQueryProcessor.AskQuestion.cs` - Regular question-answering logic
+  - Created `KernelMemoryQueryProcessor.AskTabularQuestion.cs` - Tabular data question-answering
+  - Created `KernelMemoryQueryProcessor.DatasetIdentification.cs` - Dataset identification functionality
+  - Created `KernelMemoryQueryProcessor.SchemaInfo.cs` - Schema information retrieval and formatting
+  - Created `KernelMemoryQueryProcessor.FilterGeneration.cs` - Filter generation for queries
+  - Created `KernelMemoryQueryProcessor.Search.cs` - Search execution across filters
+  - Created `KernelMemoryQueryProcessor.Synthesis.cs` - Answer synthesis from search results
+- Fixed compatibility issues with Semantic Kernel version in the AskQuestion implementation
 - This restructuring improves code organization and maintainability while preserving the same functionality
 
 ### Tabular Data Processing
@@ -122,6 +132,7 @@ The project is currently focused on implementing and testing the tabular data pr
 7. **Filename Priority for Schema Generation**: Modified the `ExtractSchemaFromWorkbook` method to prioritize the provided file path over workbook metadata (Title property) when determining the source file name.
 8. **Dependency Injection for Service Resolution**: Now using DI to provide `IMemoryDb` directly to all consumers. Reflection-based access (`MemoryHelper`) is deprecated and only present for backward compatibility. This makes the system robust to changes in Kernel Memory internals and improves maintainability.
 9. **Result Limiting Approach**: Implemented result limiting post-query to allow the LLM to still have access to all information while controlling what's displayed to the user.
+10. **Modular Code Organization**: Adopted C# partial classes to split large classes like KernelMemoryQueryProcessor into smaller, focused files while maintaining cohesion and logical grouping of functionality.
 
 ### Open Questions
 1. **Scaling Strategy**: How to efficiently scale the system for very large datasets?
