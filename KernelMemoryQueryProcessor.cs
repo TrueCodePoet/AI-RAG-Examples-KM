@@ -136,6 +136,9 @@ public class KernelMemoryQueryProcessor
 
         public async Task AskTabularQuestionAsync(string question, int? resultLimit = null)
         {
+            // --- Fetch ALL Schema Info ---
+            var (schemas, formattedSchemaInfo) = await GetAllSchemasInfoAsync();
+
             // --- Dataset Identification Step ---
             Console.WriteLine("--- Identifying Dataset ---");
             
@@ -143,7 +146,7 @@ public class KernelMemoryQueryProcessor
 
             // --- Fetch Schema Info (if dataset identified) ---
             TabularDataSchema? schema = null;
-            string formattedSchemaInfo = "No schema information available for filter generation."; // Default
+            formattedSchemaInfo = "No schema information available for filter generation."; // Default
             (schema, formattedSchemaInfo) = await GetSchemaInfoAsync(datasetName);
             Console.WriteLine($"[DEBUG] Injected schema info for prompt:\n{formattedSchemaInfo}");
 
@@ -830,6 +833,50 @@ Output:
                 Console.WriteLine($"Error during dataset identification: {ex.Message}");
             }
             return string.Empty;
+        }
+
+        // New helper method to fetch all schemas and formatted schema info
+        private async Task<(List<TabularDataSchema>, string)> GetAllSchemasInfoAsync()
+        {
+            List<TabularDataSchema> schemas = new List<TabularDataSchema>();
+            string formattedSchemaInfo = "No schema information available for filter generation.";
+            try
+            {
+                TabularFilterHelper schemaHelper;
+                if (_tabularMemoryDb != null)
+                {
+                    Console.WriteLine("INFO: Using DI-injected tabularMemoryDb for TabularFilterHelper (reflection skipped). Using all schemas.");
+                    schemaHelper = new TabularFilterHelper(_tabularMemoryDb);
+                }
+                else
+                {
+                    schemaHelper = new TabularFilterHelper(_memory, _indexName);
+                }
+                schemas = await schemaHelper.ListSchemasAsync();
+                if (schemas != null && schemas.Count > 0)
+                {
+                    var sb = new StringBuilder();
+                    foreach (var schema in schemas)
+                    {
+                        sb.AppendLine($"Dataset: {schema.DatasetName}");
+                        sb.AppendLine(FormatSchemaForPrompt(schema));
+                        sb.AppendLine();
+                    }
+                    formattedSchemaInfo = sb.ToString();
+                    Console.WriteLine($"[DEBUG] All Schemas Info for prompt:\n{formattedSchemaInfo}");
+                }
+                else
+                {
+                    Console.WriteLine("No schema objects found.");
+                    formattedSchemaInfo = "No schema objects found. Cannot provide specific field info.";
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching all schemas: {ex.Message}");
+                formattedSchemaInfo = $"Error fetching all schemas. Cannot provide specific field info.";
+            }
+            return (schemas, formattedSchemaInfo);
         }
     }
 }
