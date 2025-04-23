@@ -214,6 +214,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                 catch (Exception ex)
                 {
                     this._log.LogError(ex, "TabularCsvDecoder: Failed to process row at CSV line {LineNumber} (row index {RowIndex}). Row will be skipped.", totalLines, rowIndex);
+                    Console.WriteLine($"ERROR: Failed to process CSV row {rowIndex + 1} in file {csvFileName}: {ex.GetType().Name} - {ex.Message}");
                 }
                 rowIndex++;
             }

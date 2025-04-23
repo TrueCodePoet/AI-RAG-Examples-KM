@@ -506,6 +506,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     catch (Exception ex)
                     {
                         this._log.LogError(ex, "Error processing row {RowNumber} in worksheet {WorksheetName}. Skipping row.", row.RowNumber(), worksheetName);
+                        Console.WriteLine($"ERROR: Failed to process row {row.RowNumber()} in worksheet {worksheetName}: {ex.GetType().Name} - {ex.Message}");
                         continue;
                     }
                 }
