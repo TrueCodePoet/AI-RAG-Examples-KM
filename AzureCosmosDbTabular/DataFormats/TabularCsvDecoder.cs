@@ -324,11 +324,25 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             result.Sections.Add(chunk);
         }
 
-        // Log import batch ID and instructions for DB count check
+        // Create a standardized import summary
+        Console.WriteLine($"========== IMPORT SUMMARY ==========");
+        Console.WriteLine($"File: {originalFilename ?? csvFileName}");
+        Console.WriteLine($"Total source lines: {totalLines}");
+        Console.WriteLine($"Total records imported: {rows.Count}");
+        Console.WriteLine($"Import batch ID: {importBatchId}");
+        Console.WriteLine($"To validate in Cosmos DB, run:");
+        Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.import_batch_id = '{importBatchId}'");
+        Console.WriteLine($"====================================");
+        
+        // Additional details
+        Console.WriteLine($"Header count: {headers.Count}");
+        Console.WriteLine($"Rows processed/added: {totalRowsAdded} of {totalLines} lines");
+        
+        // Log import batch ID for database validation
         if (!string.IsNullOrEmpty(importBatchId))
         {
-            this._log.LogInformation("TabularCsvDecoder: Import complete. Parsed {RowCount} rows. Import batch ID: {ImportBatchId}", rows.Count, importBatchId);
-            Console.WriteLine($"TabularCsvDecoder: To verify DB record count for this import, query Cosmos DB for records with import_batch_id = '{importBatchId}'.");
+            this._log.LogInformation("CSV IMPORT SUMMARY - File: {FileName}, Source lines: {SourceLines}, Imported records: {ImportedRecords}, Batch ID: {BatchId}",
+                originalFilename ?? csvFileName, totalLines, rows.Count, importBatchId);
         }
 
         return result;

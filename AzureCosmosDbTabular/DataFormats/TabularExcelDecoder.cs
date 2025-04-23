@@ -520,11 +520,18 @@ public sealed class TabularExcelDecoder : IContentDecoder
             }
         } // End using workbook
 
-        Console.WriteLine($"========== PROCESSING COMPLETE ==========");
-        Console.WriteLine($"SUMMARY FOR: {originalFilename ?? "Unknown"}");
+        Console.WriteLine($"========== IMPORT SUMMARY ==========");
+        Console.WriteLine($"File: {originalFilename ?? "Unknown"}");
+        Console.WriteLine($"Total source rows: {totalRows}");
+        Console.WriteLine($"Total records imported: {totalChunks}");
+        Console.WriteLine($"Import batch ID: {methodLevelImportBatchId}");
+        Console.WriteLine($"To validate in Cosmos DB, run:");
+        Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.import_batch_id = '{methodLevelImportBatchId}'");
+        Console.WriteLine($"====================================");
+        
+        // Additional detailed statistics
         Console.WriteLine($"Total worksheets: {totalWorksheets}, Processed: {totalProcessedWorksheets}");
-        Console.WriteLine($"Total rows: {totalRows}, Processed: {processedRows}");
-        Console.WriteLine($"Total chunks/records created: {totalChunks}");
+        Console.WriteLine($"Row processing: {processedRows} of {totalRows} rows processed");
         
         if (result.Sections.Count != totalChunks)
         {
@@ -534,11 +541,11 @@ public sealed class TabularExcelDecoder : IContentDecoder
         this._log.LogInformation("Excel processing complete. Created {ChunkCount} chunks from {RowCount} rows across {WorksheetCount} worksheets.", 
             totalChunks, processedRows, totalProcessedWorksheets);
 
-        // Log import batch ID and instructions for DB count check using the method-level variable
+        // Log import batch ID for database validation
         if (!string.IsNullOrEmpty(methodLevelImportBatchId))
         {
-            this._log.LogInformation("TabularExcelDecoder: Import complete. Parsed {RowCount} rows. Import batch ID: {ImportBatchId}", processedRows, methodLevelImportBatchId);
-            Console.WriteLine($"TabularExcelDecoder: To verify DB record count for this import, query Cosmos DB for records with import_batch_id = '{methodLevelImportBatchId}'.");
+            this._log.LogInformation("EXCEL IMPORT SUMMARY - File: {FileName}, Source rows: {SourceRows}, Imported records: {ImportedRecords}, Batch ID: {BatchId}",
+                originalFilename ?? "Unknown", totalRows, totalChunks, methodLevelImportBatchId);
         }
 
         return result;
