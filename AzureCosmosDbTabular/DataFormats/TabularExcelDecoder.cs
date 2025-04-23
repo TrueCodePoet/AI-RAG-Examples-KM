@@ -414,20 +414,13 @@ public sealed class TabularExcelDecoder : IContentDecoder
                             rowData[columnName] = cellValue;
                         }
 
-                        // Add schema ID and import batch ID if available - ensure they're in the payload
+                        // Add schema ID if available - ensure it's in the payload
                         if (!string.IsNullOrEmpty(schemaId))
                         {
-                            // Add to the row data to ensure it gets into the payload
                             rowData["schema_id"] = schemaId;
                             Console.WriteLine($"TabularExcelDecoder: Adding schema ID to row data: {schemaId}");
                         }
-
-                        if (!string.IsNullOrEmpty(importBatchId))
-                        {
-                            // Add to the row data to ensure it gets into the payload
-                            rowData["import_batch_id"] = importBatchId;
-                            Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to row data: {importBatchId}");
-                        }
+                        // Do NOT add import_batch_id to rowData; use only top-level ImportBatchId property
 
                         // Log the row data for debugging
                         Console.WriteLine($"TabularExcelDecoder: Row data contains {rowData.Count} fields, including schema_id: {rowData.ContainsKey("schema_id")}, import_batch_id: {rowData.ContainsKey("import_batch_id")}");
@@ -489,19 +482,13 @@ public sealed class TabularExcelDecoder : IContentDecoder
                             metadata["dataset_name"] = this._datasetName;
                         }
 
-                        // Add schema ID and import batch ID to metadata as well
-                        // This is critical for ensuring these values are passed to the memory record
+                        // Add schema ID to metadata as well
                         if (!string.IsNullOrEmpty(schemaId))
                         {
                             metadata["schema_id"] = schemaId;
                             Console.WriteLine($"TabularExcelDecoder: Adding schema ID to chunk metadata: {schemaId}");
                         }
-
-                        if (!string.IsNullOrEmpty(importBatchId))
-                        {
-                            metadata["import_batch_id"] = importBatchId;
-                            Console.WriteLine($"TabularExcelDecoder: Adding import batch ID to chunk metadata: {importBatchId}");
-                        }
+                        // Do NOT add import_batch_id to metadata; use only top-level ImportBatchId property
 
                         // Log the chunk text
                         Console.WriteLine($"TabularExcelDecoder: Created chunk with text: {chunkText.Substring(0, Math.Min(100, chunkText.Length))}...");
@@ -526,7 +513,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
         Console.WriteLine($"Total records imported: {totalChunks}");
         Console.WriteLine($"Import batch ID: {methodLevelImportBatchId}");
         Console.WriteLine($"To validate in Cosmos DB, run:");
-        Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.import_batch_id = '{methodLevelImportBatchId}'");
+        Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.importBatchId = '{methodLevelImportBatchId}'");
         Console.WriteLine($"====================================");
         
         // Additional detailed statistics

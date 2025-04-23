@@ -128,16 +128,25 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 }
             }
             
-            // Extract import batch ID from text
-            int importBatchIdStart = recordText.IndexOf("import_batch_id is ");
-            if (importBatchIdStart >= 0)
+            // Prefer the top-level ImportBatchId property if available
+            if (!string.IsNullOrEmpty(record.ImportBatchId))
             {
-                importBatchIdStart += "import_batch_id is ".Length;
-                int importBatchIdEnd = recordText.IndexOf(".", importBatchIdStart);
-                if (importBatchIdEnd > importBatchIdStart)
+                importBatchId = record.ImportBatchId;
+                this._logger.LogDebug("UpsertAsync: Extracted import batch ID={ImportBatchId} from top-level property", importBatchId);
+            }
+            else
+            {
+                // Fallback: Extract import batch ID from text for legacy records
+                int importBatchIdStart = recordText.IndexOf("import_batch_id is ");
+                if (importBatchIdStart >= 0)
                 {
-                    importBatchId = recordText.Substring(importBatchIdStart, importBatchIdEnd - importBatchIdStart);
-                    this._logger.LogDebug("UpsertAsync: Extracted import batch ID={ImportBatchId} from text", importBatchId);
+                    importBatchIdStart += "import_batch_id is ".Length;
+                    int importBatchIdEnd = recordText.IndexOf(".", importBatchIdStart);
+                    if (importBatchIdEnd > importBatchIdStart)
+                    {
+                        importBatchId = recordText.Substring(importBatchIdStart, importBatchIdEnd - importBatchIdStart);
+                        this._logger.LogDebug("UpsertAsync: Extracted import batch ID={ImportBatchId} from text (legacy fallback)", importBatchId);
+                    }
                 }
             }
         }

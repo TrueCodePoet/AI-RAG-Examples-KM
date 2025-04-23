@@ -190,6 +190,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                         object value = string.IsNullOrEmpty(fields[i]) ? this._config.BlankCellValue : fields[i];
                         rowData[columnName] = value;
                     }
+                    // Do NOT add import_batch_id to rowData; use only top-level ImportBatchId property
 
                     // Optionally skip empty rows if configured
                     if (this._config.SkipEmptyRows && rowData.All(kvp => string.IsNullOrEmpty(kvp.Value?.ToString())))
@@ -295,10 +296,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             {
                 metadata["schema_id"] = schemaId;
             }
-            if (!string.IsNullOrEmpty(importBatchId))
-            {
-                metadata["import_batch_id"] = importBatchId;
-            }
+            // Do NOT add import_batch_id to metadata; use only top-level ImportBatchId property
 
             // Build sentence format
             var textBuilder = new StringBuilder();
@@ -331,7 +329,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         Console.WriteLine($"Total records imported: {rows.Count}");
         Console.WriteLine($"Import batch ID: {importBatchId}");
         Console.WriteLine($"To validate in Cosmos DB, run:");
-        Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.import_batch_id = '{importBatchId}'");
+        Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.importBatchId = '{importBatchId}'");
         Console.WriteLine($"====================================");
         
         // Additional details
