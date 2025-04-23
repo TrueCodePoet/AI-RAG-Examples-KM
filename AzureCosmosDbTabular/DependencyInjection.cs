@@ -82,12 +82,7 @@ public static class DependencyInjection
                 {
                     PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
                 },
-                ConnectionMode = ConnectionMode.Direct,
-                // These trace settings help reduce the DocDBTrace logs
-                Diagnostics = new CosmosClientDiagnostics
-                {
-                    TraceFlags = CosmosTrace.None 
-                }
+                ConnectionMode = ConnectionMode.Direct
             });
 
         // Register the memory DB implementation
