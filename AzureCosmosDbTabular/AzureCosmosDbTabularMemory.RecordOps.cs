@@ -128,11 +128,11 @@ internal sealed partial class AzureCosmosDbTabularMemory
                 }
             }
             
-            // Prefer the top-level ImportBatchId property if available
-            if (!string.IsNullOrEmpty(record.ImportBatchId))
+            // Extract import batch ID from the payload dictionary if available
+            if (record.Payload.TryGetValue("import_batch_id", out var importBatchIdObj) && importBatchIdObj is string importBatchIdStr && !string.IsNullOrEmpty(importBatchIdStr))
             {
-                importBatchId = record.ImportBatchId;
-                this._logger.LogDebug("UpsertAsync: Extracted import batch ID={ImportBatchId} from top-level property", importBatchId);
+                importBatchId = importBatchIdStr;
+                this._logger.LogDebug("UpsertAsync: Extracted import batch ID={ImportBatchId} from payload dictionary", importBatchId);
             }
             else
             {
@@ -163,10 +163,10 @@ internal sealed partial class AzureCosmosDbTabularMemory
         
         if (string.IsNullOrEmpty(importBatchId) && 
             record.Payload.TryGetValue("import_batch_id", out var importBatchIdValue) && 
-            importBatchIdValue is string importBatchIdStr && 
-            !string.IsNullOrEmpty(importBatchIdStr))
+            importBatchIdValue is string importBatchIdStrFallback && 
+            !string.IsNullOrEmpty(importBatchIdStrFallback))
         {
-            importBatchId = importBatchIdStr;
+            importBatchId = importBatchIdStrFallback;
             this._logger.LogDebug("UpsertAsync: Found import batch ID {ImportBatchId} in record payload", importBatchId);
         }
 

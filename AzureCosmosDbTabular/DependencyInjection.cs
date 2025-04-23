@@ -72,7 +72,7 @@ public static class DependencyInjection
         this IKernelMemoryBuilder builder,
         AzureCosmosDbTabularConfig config)
     {
-        // Create the Cosmos DB client with specific options to reduce logging noise
+        // Create the Cosmos DB client (remove unsupported diagnostics options)
         var cosmosClient = new CosmosClient(
             config.Endpoint,
             config.APIKey,
@@ -81,13 +81,8 @@ public static class DependencyInjection
                 SerializerOptions = new CosmosSerializationOptions
                 {
                     PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-                },
-                ConnectionMode = ConnectionMode.Direct,
-                // These trace settings help reduce the DocDBTrace logs
-                Diagnostics = new CosmosClientDiagnostics
-                {
-                    TraceFlags = CosmosTrace.None 
                 }
+                // Removed unsupported diagnostics options
             });
 
         // Register the memory DB implementation

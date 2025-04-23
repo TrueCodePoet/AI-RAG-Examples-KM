@@ -130,6 +130,9 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         List<string> headers = new();
         List<Dictionary<string, object>> rows = new();
 
+        // Prepare importBatchId before row processing
+        string importBatchId = string.Empty;
+
         // Read the CSV into memory (assume UTF-8)
         int totalLines = 0;
         int totalRowsAdded = 0;
@@ -190,7 +193,12 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                         object value = string.IsNullOrEmpty(fields[i]) ? this._config.BlankCellValue : fields[i];
                         rowData[columnName] = value;
                     }
-                    // Do NOT add import_batch_id to rowData; use only top-level ImportBatchId property
+                    // Restore: Add import_batch_id to rowData for compatibility with RecordOps
+                    if (!string.IsNullOrEmpty(importBatchId))
+                    {
+                        rowData["import_batch_id"] = importBatchId;
+                        Console.WriteLine($"TabularCsvDecoder: Adding import batch ID to row data: {importBatchId}");
+                    }
 
                     // Optionally skip empty rows if configured
                     if (this._config.SkipEmptyRows && rowData.All(kvp => string.IsNullOrEmpty(kvp.Value?.ToString())))
@@ -214,7 +222,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         this._log.LogInformation($"TabularCsvDecoder: Finished reading CSV. Total lines: {totalLines}, Rows added: {totalRowsAdded}, Headers: {headers.Count}");
         // Schema extraction
         string schemaId = string.Empty;
-        string importBatchId = string.Empty;
+        // importBatchId is already declared above
         if (this._memory == null)
         {
             this._log.LogWarning("TabularCsvDecoder: _memory is null, schema will not be created.");
