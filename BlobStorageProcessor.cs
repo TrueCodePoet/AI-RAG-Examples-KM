@@ -12,19 +12,22 @@ namespace AI_RAG_Examples_KM
         private readonly string _indexName;
         private readonly string _localDownloadPath;
         private readonly IMemoryDb? _memoryDb; // Optional for DI
+        private readonly CustomTabularIngestion? _customTabularIngestion;
 
         public BlobStorageProcessor(
             IKernelMemory memory, 
             BlobStorageSettings blobSettings, 
             string indexName,
             string localDownloadPath,
-            IMemoryDb? memoryDb = null)
+            IMemoryDb? memoryDb = null,
+            CustomTabularIngestion? customTabularIngestion = null)
         {
             _memory = memory;
             _blobSettings = blobSettings;
             _indexName = indexName;
             _localDownloadPath = localDownloadPath;
             _memoryDb = memoryDb;
+            _customTabularIngestion = customTabularIngestion;
         }
 
         // Method 1: Process blobs from Azure Blob Storage
@@ -166,12 +169,22 @@ namespace AI_RAG_Examples_KM
                 
                 filesAttempted++;
                 Console.WriteLine($"[{filesAttempted}/{files.Length}] Processing: {relativePath}");
-         
+
                 try
                 {
-                    // We already have the extension variable from above
-                    //bool isText = IsTextFile(extension);
-         
+                    // Use custom ingestion if provided and file is tabular
+                    if (_customTabularIngestion != null &&
+                        (extension == ".xlsx" || extension == ".csv"))
+                    {
+                        Console.WriteLine($"[CustomIngestion] Using custom ingestion for: {localFilePath}");
+                        await _customTabularIngestion.ImportTabularDocumentCustomAsync(localFilePath, _indexName);
+                        filesSucceeded++;
+                        // Note: We might want to decide if standard ingestion should also run
+                        // For now, we skip standard if custom runs
+                        continue; 
+                    }
+
+                    // Standard ingestion path
                     Console.WriteLine($"Uploading memory file: {localFilePath}");
                     
                     // Create a stopwatch to track import time
@@ -179,7 +192,7 @@ namespace AI_RAG_Examples_KM
                     stopwatch.Start();
                     
                     // Create a CancellationToken with IndexName property set
-                    var cts = new CancellationTokenSource();
+                    var cts = new System.Threading.CancellationTokenSource();
                     var token = cts.Token;
                     // Use reflection to set the IndexName property if supported
                     var indexNameProp = token.GetType().GetProperty("IndexName");

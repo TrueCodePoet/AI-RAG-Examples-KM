@@ -1,4 +1,4 @@
-﻿﻿﻿using Microsoft.KernelMemory;
+﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -10,6 +10,7 @@ using Microsoft.SemanticKernel.Connectors.AzureOpenAI; // For AzureOpenAIPromptE
 using System.Text.Json; // For JsonSerializer
 using Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 using Microsoft.SemanticKernel.Connectors.OpenAI; // For MemoryFilter
+using Microsoft.KernelMemory.AI; // Added for ITextEmbeddingGenerator
 
 // Define index names for both pipeline types
 const string TabularIndexName = "sc-seoaichat-sv-index-DSS-KernelMemory-Tabular";
@@ -74,6 +75,50 @@ var tabularFileProcessor = new BlobStorageProcessor(
     TabularIndexName,
     LocalDownloadPath,
     tabularMemoryDb);
+
+// --- Custom Excel Ingestion Pipeline Example ---
+if (tabularMemoryDb is AzureCosmosDbTabularMemory tabularDb)
+{
+    // Extract dependencies from tabularDb using reflection
+    var cosmosClient = (Microsoft.Azure.Cosmos.CosmosClient?)typeof(AzureCosmosDbTabularMemory)
+        .GetField("_cosmosClient", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+        ?.GetValue(tabularDb);
+    var logger = (Microsoft.Extensions.Logging.ILogger?)typeof(AzureCosmosDbTabularMemory)
+        .GetField("_logger", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+        ?.GetValue(tabularDb);
+    var embeddingGenerator = (ITextEmbeddingGenerator?)typeof(AzureCosmosDbTabularMemory)
+        .GetField("_embeddingGenerator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+        ?.GetValue(tabularDb) as Microsoft.KernelMemory.AI.ITextEmbeddingGenerator; // Correct cast
+
+    if (cosmosClient != null && logger != null && embeddingGenerator != null)
+    {
+        var customIngestion = new CustomTabularIngestion(
+            memoryDb: tabularDb,
+            cosmosClient: cosmosClient,
+            embeddingGenerator: embeddingGenerator,
+            logger: logger,
+            databaseName: appConfig.CosmosDbTabularSettings.DatabaseName,
+            indexName: TabularIndexName
+        );
+
+        // Create a BlobStorageProcessor that uses the custom ingestion pipeline
+        var customTabularFileProcessor = new BlobStorageProcessor(
+            tabularMemory,
+            appConfig.BlobStorageSettings,
+            TabularIndexName,
+            LocalDownloadPath,
+            tabularMemoryDb,
+            customTabularIngestion: customIngestion
+        );
+
+        // Example: Ingest Excel files using the custom pipeline
+        // await customTabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
+    }
+    else
+    {
+        Console.WriteLine("CustomTabularIngestion: Could not resolve all dependencies from tabularMemoryDb.");
+    }
+}
 
 var standardFileProcessor = new BlobStorageProcessor(
     standardMemory,
