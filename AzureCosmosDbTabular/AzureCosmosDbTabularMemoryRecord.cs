@@ -18,9 +18,9 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 
 /// <summary>
-/// Represents a memory record in Azure Cosmos DB for tabular data.
+/// Represents a memory record stored in Azure Cosmos DB for tabular data.
 /// </summary>
-internal class AzureCosmosDbTabularMemoryRecord
+public sealed class AzureCosmosDbTabularMemoryRecord
 {
     /// <summary>
     /// Field name for the vector embedding.
@@ -357,7 +357,7 @@ internal class AzureCosmosDbTabularMemoryRecord
         return Convert.ToBase64String(bytes).Replace('=', '_');
     }
 
-    private static string DecodeId(string encodedId)
+    public static string DecodeId(string encodedId) // Changed from private to public static
     {
         try
         {

@@ -55,6 +55,21 @@ public class CustomTabularIngestion
 
         Console.WriteLine($"[CustomIngestion] Starting custom ingestion for {filePath} ({totalRows} rows)");
 
+        // Ensure the index/container exists before upserting
+        try
+        {
+            // Assuming a fixed vector size for now, ideally get from config or embedding generator
+            const int vectorSize = 1536; 
+            await _memoryDb.CreateIndexAsync(_indexName, vectorSize, cancellationToken);
+            Console.WriteLine($"[CustomIngestion] Ensured index '{_indexName}' exists.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CustomIngestion] Failed to create or ensure index '{IndexName}' exists. Aborting ingestion.", _indexName);
+            Console.WriteLine($"[CustomIngestion] ERROR: Failed to create index '{_indexName}'. Aborting.");
+            return; // Stop ingestion if index creation fails
+        }
+
         foreach (var chunk in fileContent.Sections)
         {
             try

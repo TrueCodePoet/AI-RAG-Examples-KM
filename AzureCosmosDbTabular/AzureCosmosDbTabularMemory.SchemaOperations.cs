@@ -12,7 +12,7 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// <summary>
 /// Azure Cosmos DB implementation of <see cref="IMemoryDb"/> for tabular data.
 /// </summary>
-internal sealed partial class AzureCosmosDbTabularMemory
+public sealed partial class AzureCosmosDbTabularMemory
 {
     /// <summary>
     /// Creates a new schema for the given dataset and returns its ID and import batch ID.

@@ -15,7 +15,7 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// <summary>
 /// Azure Cosmos DB implementation of <see cref="IMemoryDb"/> for tabular data.
 /// </summary>
-internal sealed partial class AzureCosmosDbTabularMemory
+public sealed partial class AzureCosmosDbTabularMemory
 {
     /// <summary>
     /// Processes memory filters to extract both standard tag filters and structured data filters.

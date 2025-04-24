@@ -12,7 +12,7 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// <summary>
 /// Azure Cosmos DB implementation of <see cref="IMemoryDb"/> for tabular data.
 /// </summary>
-internal sealed partial class AzureCosmosDbTabularMemory : IMemoryDb
+public sealed partial class AzureCosmosDbTabularMemory : IMemoryDb
 {
     private readonly CosmosClient _cosmosClient;
     private readonly ITextEmbeddingGenerator _embeddingGenerator;

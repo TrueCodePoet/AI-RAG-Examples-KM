@@ -17,7 +17,7 @@ namespace Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular;
 /// <summary>
 /// Azure Cosmos DB implementation of <see cref="IMemoryDb"/> for tabular data.
 /// </summary>
-internal sealed partial class AzureCosmosDbTabularMemory
+public sealed partial class AzureCosmosDbTabularMemory
 {
     /// <inheritdoc/>
     public async Task CreateIndexAsync(string index, int vectorSize, CancellationToken cancellationToken = default)
