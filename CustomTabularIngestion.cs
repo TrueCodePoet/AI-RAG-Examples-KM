@@ -45,13 +45,35 @@ public class CustomTabularIngestion
         // Determine file type and use the appropriate decoder
         IContentDecoder decoder = filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
             ? new TabularCsvDecoder()
-            : (IContentDecoder)new TabularExcelDecoder();
+            : new TabularExcelDecoder(); // Cast is not needed if both implement IContentDecoder
 
-        // Decode the file into chunks (rows)
-        var fileContent = await decoder.DecodeAsync(filePath, cancellationToken);
+        // Decode the file into chunks (rows) and get the schema
+        FileContent fileContent;
+        TabularDataSchema? schema;
+        // Use File.OpenRead to get a stream, then call the internal method
+        using (var fileStream = File.OpenRead(filePath))
+        {
+            if (decoder is TabularCsvDecoder csvDecoder)
+            {
+                (fileContent, schema) = await csvDecoder.DecodeStreamInternalAsync(fileStream, filePath, cancellationToken);
+            }
+            else if (decoder is TabularExcelDecoder excelDecoder)
+            {
+                (fileContent, schema) = await excelDecoder.DecodeStreamInternalAsync(fileStream, filePath, cancellationToken);
+            }
+            else
+            {
+                // Fallback for generic IContentDecoder (though unlikely for tabular)
+                // This path won't get the schema
+                fileContent = await decoder.DecodeAsync(fileStream, cancellationToken);
+                schema = null; 
+            }
+        }
+
         int totalRows = fileContent.Sections.Count;
         int successCount = 0;
         int failCount = 0;
+        string importBatchId = schema?.ImportBatchId ?? string.Empty; // Get batch ID from schema
 
         Console.WriteLine($"[CustomIngestion] Starting custom ingestion for {filePath} ({totalRows} rows)");
 
@@ -95,7 +117,7 @@ public class CustomTabularIngestion
                     data: null,
                     source: chunk.Metadata.ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString() ?? string.Empty),
                     schemaId: chunk.Metadata.ContainsKey("schema_id") ? chunk.Metadata["schema_id"] : null,
-                    importBatchId: chunk.Metadata.ContainsKey("import_batch_id") ? chunk.Metadata["import_batch_id"] : null
+                    importBatchId: importBatchId // Use the batch ID from the schema
                 );
 
                 await _cosmosClient
@@ -117,6 +139,12 @@ public class CustomTabularIngestion
             }
         }
 
-        Console.WriteLine($"[CustomIngestion] Complete. Success: {successCount}, Failed: {failCount}, Total: {totalRows}");
+        // Update final summary log to include the batch ID
+        Console.WriteLine($"[CustomIngestion] Complete. Success: {successCount}, Failed: {failCount}, Total: {totalRows}, Batch ID: {importBatchId}");
+        if (!string.IsNullOrEmpty(importBatchId))
+        {
+             Console.WriteLine($"To validate in Cosmos DB, run:");
+             Console.WriteLine($"SELECT COUNT(1) FROM c WHERE c.importBatchId = '{importBatchId}'");
+        }
     }
 }

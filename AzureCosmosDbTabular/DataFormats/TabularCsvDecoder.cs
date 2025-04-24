@@ -102,29 +102,35 @@ internal sealed class TabularCsvDecoder : IContentDecoder
         );
     }
 
-    public async Task<FileContent> DecodeAsync(string filename, CancellationToken cancellationToken = default)
+    // Explicit implementation of IContentDecoder.DecodeAsync
+    async Task<FileContent> IContentDecoder.DecodeAsync(string filename, CancellationToken cancellationToken)
     {
-        this._log.LogDebug("Decoding CSV file: {Filename}", filename);
-        using var stream = File.OpenRead(filename);
-        return await this.DecodeStreamInternalAsync(stream, filename, cancellationToken);
+        var (fileContent, _) = await this.DecodeStreamInternalAsync(File.OpenRead(filename), filename, cancellationToken);
+        return fileContent;
     }
 
-    public async Task<FileContent> DecodeAsync(BinaryData data, CancellationToken cancellationToken = default)
+    // Explicit implementation of IContentDecoder.DecodeAsync
+    async Task<FileContent> IContentDecoder.DecodeAsync(BinaryData data, CancellationToken cancellationToken)
     {
         using var stream = data.ToStream();
-        return await this.DecodeStreamInternalAsync(stream, originalFilename: null, cancellationToken: cancellationToken);
+        var (fileContent, _) = await this.DecodeStreamInternalAsync(stream, null, cancellationToken);
+        return fileContent;
     }
 
-    public async Task<FileContent> DecodeAsync(Stream data, CancellationToken cancellationToken = default)
+    // Explicit implementation of IContentDecoder.DecodeAsync
+    async Task<FileContent> IContentDecoder.DecodeAsync(Stream data, CancellationToken cancellationToken)
     {
-        return await this.DecodeStreamInternalAsync(data, originalFilename: null, cancellationToken: cancellationToken);
+        var (fileContent, _) = await this.DecodeStreamInternalAsync(data, null, cancellationToken);
+        return fileContent;
     }
 
     // Internal method to handle the actual stream decoding, accepting an optional original filename
-    private async Task<FileContent> DecodeStreamInternalAsync(Stream data, string? originalFilename = null, CancellationToken cancellationToken = default)
+    // Now returns a tuple with FileContent and the extracted Schema
+    internal async Task<(FileContent FileContent, TabularDataSchema? Schema)> DecodeStreamInternalAsync(Stream data, string? originalFilename = null, CancellationToken cancellationToken = default)
     {
         this._log.LogDebug("Internal: Extracting tabular data from CSV file stream. Original filename: {OriginalFilename}", originalFilename ?? "Unknown");
         var result = new FileContent(MimeTypes.PlainText);
+        TabularDataSchema? extractedSchema = null; // Variable to hold the extracted schema
 
         string csvFileName = originalFilename != null ? Path.GetFileName(originalFilename) : "csv_import";
         List<string> headers = new();
@@ -237,9 +243,9 @@ internal sealed class TabularCsvDecoder : IContentDecoder
             try
             {
                 this._log.LogInformation($"TabularCsvDecoder: [PRE-SCHEMA] About to extract and store schema for dataset '{this._datasetName}' using memory instance '{this._memory.GetType().FullName}'.");
-                var schema = ExtractSchemaFromCsv(headers, rows, this._datasetName, csvFileName);
-                this._log.LogInformation($"TabularCsvDecoder: [POST-SCHEMA] Schema object created: ID={schema?.Id ?? "null"}, File={schema?.File ?? "null"}, DatasetName={schema?.DatasetName ?? "null"}");
-                if (schema != null)
+                extractedSchema = ExtractSchemaFromCsv(headers, rows, this._datasetName, csvFileName); // Store extracted schema
+                this._log.LogInformation($"TabularCsvDecoder: [POST-SCHEMA] Schema object created: ID={extractedSchema?.Id ?? "null"}, File={extractedSchema?.File ?? "null"}, DatasetName={extractedSchema?.DatasetName ?? "null"}");
+                if (extractedSchema != null)
                 {
                     string? indexName = null;
                     if (cancellationToken.GetType().GetProperty("IndexName")?.GetValue(cancellationToken) is string ctxIndexName)
@@ -253,13 +259,13 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                         indexName = this._datasetName;
                         this._log.LogDebug("Index name not found in context; defaulting to dataset name '{DatasetName}' for schema storage", this._datasetName);
                     }
-                    Console.WriteLine($"TabularCsvDecoder: Storing schema with ID={schema.Id} to database index: {indexName ?? "default"}, " +
-                                     $"Dataset: {this._datasetName}, File: {schema.File}");
-                    var storedSchemaId = await this._memory.StoreSchemaAsync(schema, indexName, cancellationToken).ConfigureAwait(false);
+                    Console.WriteLine($"TabularCsvDecoder: Storing schema with ID={extractedSchema.Id} to database index: {indexName ?? "default"}, " +
+                                     $"Dataset: {this._datasetName}, File: {extractedSchema.File}");
+                    var storedSchemaId = await this._memory.StoreSchemaAsync(extractedSchema, indexName, cancellationToken).ConfigureAwait(false);
                     if (!string.IsNullOrEmpty(storedSchemaId))
                     {
                         schemaId = storedSchemaId;
-                        importBatchId = schema.ImportBatchId;
+                        importBatchId = extractedSchema.ImportBatchId;
                         Console.WriteLine($"TabularCsvDecoder: Schema storage SUCCESS! ID={schemaId}, ImportBatchId={importBatchId}");
                         this._log.LogInformation("Stored schema with ID {SchemaId} and import batch ID {ImportBatchId} for dataset {DatasetName}",
                             schemaId, importBatchId, this._datasetName);
@@ -352,7 +358,7 @@ internal sealed class TabularCsvDecoder : IContentDecoder
                 originalFilename ?? csvFileName, totalLines, rows.Count, importBatchId);
         }
 
-        return result;
+        return (result, extractedSchema); // Return both FileContent and the extracted Schema
     }
 
     // Custom CSV line parser (handles quoted fields, commas, newlines)

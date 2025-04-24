@@ -136,7 +136,8 @@ public sealed class TabularExcelDecoder : IContentDecoder
         this._log.LogDebug("Decoding file: {Filename}", filename);
         using var stream = File.OpenRead(filename);
         // Pass the filename to the internal stream decoding method
-        return await this.DecodeStreamInternalAsync(stream, filename, cancellationToken);
+        var (fileContent, _) = await this.DecodeStreamInternalAsync(stream, filename, cancellationToken);
+        return fileContent;
     }
 
     /// <inheritdoc />
@@ -144,24 +145,28 @@ public sealed class TabularExcelDecoder : IContentDecoder
     {
         using var stream = data.ToStream();
         // Call the internal stream decoding method without a filename
-        return await this.DecodeStreamInternalAsync(stream, originalFilename: null, cancellationToken: cancellationToken);
+        var (fileContent, _) = await this.DecodeStreamInternalAsync(stream, originalFilename: null, cancellationToken: cancellationToken);
+        return fileContent;
     }
 
     /// <inheritdoc />
     public async Task<FileContent> DecodeAsync(Stream data, CancellationToken cancellationToken = default)
     {
         // Call the internal stream decoding method without a filename, passing the 'data' parameter
-        return await this.DecodeStreamInternalAsync(data, originalFilename: null, cancellationToken: cancellationToken);
+        var (fileContent, _) = await this.DecodeStreamInternalAsync(data, originalFilename: null, cancellationToken: cancellationToken);
+        return fileContent;
     }
 
     // Internal method to handle the actual stream decoding, accepting an optional original filename
-    private async Task<FileContent> DecodeStreamInternalAsync(Stream data, string? originalFilename = null, CancellationToken cancellationToken = default)
+    // Now returns a tuple with FileContent and the extracted Schema
+    internal async Task<(FileContent FileContent, TabularDataSchema? Schema)> DecodeStreamInternalAsync(Stream data, string? originalFilename = null, CancellationToken cancellationToken = default)
     {
         this._log.LogDebug("Internal: Extracting tabular data from MS Excel file stream. Original filename: {OriginalFilename}", originalFilename ?? "Unknown");
         Console.WriteLine($"========== STARTING PROCESSING: {originalFilename ?? "Unknown"} ==========");
 
         var result = new FileContent(MimeTypes.PlainText);
         XLWorkbook? workbook = null;
+        TabularDataSchema? extractedSchema = null; // Variable to hold the extracted schema
         
         // Counters for tracking records processed
         int totalWorksheets = 0;
@@ -210,7 +215,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                     result.Sections.Add(new Chunk("This Excel file could not be processed due to PivotTable or XML structure issues.", 1, 
                         new Dictionary<string, string> { ["processing_error"] = "PivotTable structure issue" }));
                     
-                    return result; // Return result with error note
+                    return (result, null); // Return result with error note and null schema
                 }
                 else
                 {
@@ -541,7 +546,7 @@ public sealed class TabularExcelDecoder : IContentDecoder
                 originalFilename ?? "Unknown", totalRows, totalChunks, methodLevelImportBatchId);
         }
 
-        return result;
+        return (result, extractedSchema); // Return both FileContent and the extracted Schema
     }
 
     /// <summary>
