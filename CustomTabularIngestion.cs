@@ -43,9 +43,27 @@ public class CustomTabularIngestion
         CancellationToken cancellationToken = default)
     {
         // Determine file type and use the appropriate decoder
-        IContentDecoder decoder = filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
-            ? new TabularCsvDecoder()
-            : new TabularExcelDecoder(); // Cast is not needed if both implement IContentDecoder
+        // Ensure we pass the memory instance and dataset name to the decoder for schema extraction
+        var tabularMemory = _memoryDb as Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.AzureCosmosDbTabularMemory;
+        var loggerFactory = _logger is ILogger loggerObj && loggerObj is ILoggerFactory lf ? lf : null;
+
+        IContentDecoder decoder;
+        if (filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            decoder = new Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.DataFormats.TabularCsvDecoder(
+                null, // use default config
+                tabularMemory,
+                loggerFactory
+            ).WithDatasetName(datasetName);
+        }
+        else
+        {
+            decoder = new Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.DataFormats.TabularExcelDecoder(
+                null, // use default config
+                tabularMemory,
+                loggerFactory
+            ).WithDatasetName(datasetName);
+        }
 
         // Decode the file into chunks (rows) and get the schema
         FileContent fileContent;
@@ -75,8 +93,8 @@ public class CustomTabularIngestion
         string importBatchId = string.Empty;
         if (schema != null)
         {
-            // Try to cast _memoryDb to AzureCosmosDbTabularMemory to access StoreSchemaAsync
-            if (_memoryDb is Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.AzureCosmosDbTabularMemory tabularMemory)
+            // Use the tabularMemory variable already declared above
+            if (tabularMemory != null)
             {
                 schemaId = await tabularMemory.StoreSchemaAsync(schema, _indexName, cancellationToken);
                 importBatchId = schema.ImportBatchId ?? string.Empty;
