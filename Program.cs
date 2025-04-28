@@ -181,15 +181,15 @@ Console.WriteLine("\n*** Processing files through both pipelines ***");
 // await standardFileProcessor.ProcessBlobsFromStorageAsync();
 
 // Option 2: Process files from local file system
-Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
-await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
+//Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
+//await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
 
-Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
-await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.csv");
+//Console.WriteLine("\n*** Processing through Tabular Pipeline ***");
+//await tabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.csv");
 
 
-Console.WriteLine("\n*** Processing through Standard Pipeline ***");
-await standardFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
+//Console.WriteLine("\n*** Processing through Standard Pipeline ***");
+//await standardFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
 
 // This section allows you to query both Kernel Memory indexes
 await QueryKernelMemory();
