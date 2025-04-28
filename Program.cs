@@ -77,6 +77,7 @@ var tabularFileProcessor = new BlobStorageProcessor(
     LocalDownloadPath,
     tabularMemoryDb);
 
+
 // --- Custom Excel Ingestion Pipeline Example ---
 if (tabularMemoryDb is AzureCosmosDbTabularMemory tabularDb)
 {
@@ -101,7 +102,8 @@ if (tabularMemoryDb is AzureCosmosDbTabularMemory tabularDb)
             databaseName: appConfig.CosmosDbTabularSettings.DatabaseName,
             indexName: TabularIndexName
         );
-
+        customIngestion.BatchSize = 50; // Set the batch size for ingestion
+        
         // Create a BlobStorageProcessor that uses the custom ingestion pipeline
         var customTabularFileProcessor = new BlobStorageProcessor(
             tabularMemory,
@@ -114,6 +116,30 @@ if (tabularMemoryDb is AzureCosmosDbTabularMemory tabularDb)
 
         // Example: Ingest Excel files using the custom pipeline
         // await customTabularFileProcessor.ProcessFilesFromLocalDirectoryAsync(fileExtensionPattern: "*.xlsx");
+
+        // --- SharePoint Ingestion Section ---
+        // Example SharePoint config values (replace with your actual config or load from appsettings.json)
+        string sharepointTenantId = "YOUR_TENANT_ID";
+        string sharepointClientId = "YOUR_CLIENT_ID";
+        string sharepointClientSecret = "YOUR_CLIENT_SECRET";
+        string sharepointSiteId = "YOUR_SITE_ID";
+        string sharepointDriveId = "YOUR_DRIVE_ID";
+        string sharepointDownloadPath = @"D:\Temp\SHAREPOINT";
+
+        var sharePointProcessor = new SharePointFileProcessor(
+            sharepointTenantId,
+            sharepointClientId,
+            sharepointClientSecret,
+            sharepointSiteId,
+            sharepointDriveId,
+            sharepointDownloadPath,
+            customIngestion
+        );
+
+        // Example: Ingest all Excel files from SharePoint
+        // await sharePointProcessor.ProcessFilesFromSharePointAsync(fileExtensionPattern: "*.xlsx");
+        // Example: Ingest all CSV files from SharePoint
+        // await sharePointProcessor.ProcessFilesFromSharePointAsync(fileExtensionPattern: "*.csv");
     }
     else
     {
@@ -208,5 +234,3 @@ public class CosmosDbSettings
 //     public string BlobContainerUrl { get; set; } = string.Empty;
 //     public string SasToken { get; set; } = string.Empty;
 // }
-
-

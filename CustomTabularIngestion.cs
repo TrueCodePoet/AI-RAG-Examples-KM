@@ -21,6 +21,11 @@ public class CustomTabularIngestion
     private readonly string _databaseName;
     private readonly string _indexName;
 
+    /// <summary>
+    /// Batch size for ingestion. If 1, disables batching. If >1, enables batching.
+    /// </summary>
+    public int BatchSize { get; set; } = 1;
+
     public CustomTabularIngestion(
         IMemoryDb memoryDb,
         CosmosClient cosmosClient,
@@ -128,60 +133,107 @@ public class CustomTabularIngestion
             return; // Stop ingestion if index creation fails
         }
 
+        // Prepare all records first
+        var cosmosRecords = new List<AzureCosmosDbTabularMemoryRecord>();
         foreach (var chunk in fileContent.Sections)
         {
-            try
+            // Ensure schema_id and importBatchId are present in metadata
+            if (!chunk.Metadata.ContainsKey("schema_id") && !string.IsNullOrEmpty(schemaId))
             {
-                // Ensure schema_id and importBatchId are present in metadata
-                if (!chunk.Metadata.ContainsKey("schema_id") && !string.IsNullOrEmpty(schemaId))
-                {
-                    chunk.Metadata["schema_id"] = schemaId;
-                }
-                if (!chunk.Metadata.ContainsKey("importBatchId") && !string.IsNullOrEmpty(importBatchId))
-                {
-                    chunk.Metadata["importBatchId"] = importBatchId;
-                }
-
-                // Generate embedding for the chunk text
-                var embedding = await _embeddingGenerator.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
-
-                // Build the MemoryRecord (mimic SDK structure)
-                var record = new MemoryRecord
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Payload = new Dictionary<string, object>(chunk.Metadata.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value))
-                    {
-                        ["text"] = chunk.Content
-                    },
-                    Vector = embedding.Data,
-                    Tags = new TagCollection()
-                };
-
-                // Upsert to Cosmos DB
-                var cosmosRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(
-                    record,
-                    data: null,
-                    source: chunk.Metadata.ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString() ?? string.Empty),
-                    schemaId: chunk.Metadata.ContainsKey("schema_id") ? chunk.Metadata["schema_id"] : null,
-                    importBatchId: chunk.Metadata.ContainsKey("importBatchId") ? chunk.Metadata["importBatchId"] : importBatchId
-                );
-
-                await _cosmosClient
-                    .GetDatabase(_databaseName)
-                    .GetContainer(_indexName)
-                    .UpsertItemAsync(
-                        cosmosRecord,
-                        cosmosRecord.GetPartitionKey(),
-                        cancellationToken: cancellationToken);
-
-                successCount++;
+                chunk.Metadata["schema_id"] = schemaId;
             }
-            catch (Exception ex)
+            if (!chunk.Metadata.ContainsKey("importBatchId") && !string.IsNullOrEmpty(importBatchId))
             {
-                failCount++;
-                var rowNum = chunk.Metadata.TryGetValue("rowNumber", out var rn) ? rn : "?";
-                _logger.LogError(ex, "[CustomIngestion] Failed to process row {RowNumber}: {Error}", rowNum, ex.Message);
-                Console.WriteLine($"[CustomIngestion] ERROR: Failed to process row {rowNum}: {ex.GetType().Name} - {ex.Message}");
+                chunk.Metadata["importBatchId"] = importBatchId;
+            }
+
+            // Generate embedding for the chunk text
+            var embedding = await _embeddingGenerator.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
+
+            // Build the MemoryRecord (mimic SDK structure)
+            var record = new MemoryRecord
+            {
+                Id = Guid.NewGuid().ToString(),
+                Payload = new Dictionary<string, object>(chunk.Metadata.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value))
+                {
+                    ["text"] = chunk.Content
+                },
+                Vector = embedding.Data,
+                Tags = new TagCollection()
+            };
+
+            // Upsert to Cosmos DB
+            var cosmosRecord = AzureCosmosDbTabularMemoryRecord.FromMemoryRecord(
+                record,
+                data: null,
+                source: chunk.Metadata.ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString() ?? string.Empty),
+                schemaId: chunk.Metadata.ContainsKey("schema_id") ? chunk.Metadata["schema_id"] : null,
+                importBatchId: chunk.Metadata.ContainsKey("importBatchId") ? chunk.Metadata["importBatchId"] : importBatchId
+            );
+
+            cosmosRecords.Add(cosmosRecord);
+        }
+
+        // Group by partition key (file name)
+        var groups = new Dictionary<string, List<AzureCosmosDbTabularMemoryRecord>>();
+        foreach (var rec in cosmosRecords)
+        {
+            if (!groups.ContainsKey(rec.File))
+                groups[rec.File] = new List<AzureCosmosDbTabularMemoryRecord>();
+            groups[rec.File].Add(rec);
+        }
+
+        foreach (var group in groups)
+        {
+            var partitionKey = group.Key;
+            var records = group.Value;
+            if (BatchSize > 1)
+            {
+                // Batch insert using TransactionalBatch
+                for (int i = 0; i < records.Count; i += BatchSize)
+                {
+                    var batch = records.GetRange(i, Math.Min(BatchSize, records.Count - i));
+                    var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_indexName);
+                    var transactionalBatch = container.CreateTransactionalBatch(new PartitionKey(partitionKey));
+                    foreach (var rec in batch)
+                    {
+                        transactionalBatch.UpsertItem(rec);
+                    }
+                    var response = await transactionalBatch.ExecuteAsync(cancellationToken);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        successCount += batch.Count;
+                    }
+                    else
+                    {
+                        failCount += batch.Count;
+                        _logger.LogError("[CustomIngestion] TransactionalBatch failed for partition {PartitionKey}: {StatusCode}", partitionKey, response.StatusCode);
+                    }
+                }
+            }
+            else
+            {
+                // Single insert (current behavior)
+                foreach (var rec in records)
+                {
+                    try
+                    {
+                        await _cosmosClient
+                            .GetDatabase(_databaseName)
+                            .GetContainer(_indexName)
+                            .UpsertItemAsync(
+                                rec,
+                                rec.GetPartitionKey(),
+                                cancellationToken: cancellationToken);
+
+                        successCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failCount++;
+                        _logger.LogError(ex, "[CustomIngestion] Failed to process record for partition {PartitionKey}: {Error}", partitionKey, ex.Message);
+                    }
+                }
             }
         }
 
