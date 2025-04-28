@@ -70,10 +70,28 @@ public class CustomTabularIngestion
             }
         }
 
+        // Store the schema if available
+        string schemaId = string.Empty;
+        string importBatchId = string.Empty;
+        if (schema != null)
+        {
+            // Try to cast _memoryDb to AzureCosmosDbTabularMemory to access StoreSchemaAsync
+            if (_memoryDb is Microsoft.KernelMemory.MemoryDb.AzureCosmosDbTabular.AzureCosmosDbTabularMemory tabularMemory)
+            {
+                schemaId = await tabularMemory.StoreSchemaAsync(schema, _indexName, cancellationToken);
+                importBatchId = schema.ImportBatchId ?? string.Empty;
+                Console.WriteLine($"[CustomIngestion] Stored schema with ID: {schemaId}, Batch ID: {importBatchId}");
+            }
+            else
+            {
+                Console.WriteLine("[CustomIngestion] WARNING: _memoryDb is not AzureCosmosDbTabularMemory, cannot store schema.");
+                importBatchId = schema.ImportBatchId ?? string.Empty;
+            }
+        }
+
         int totalRows = fileContent.Sections.Count;
         int successCount = 0;
         int failCount = 0;
-        string importBatchId = schema?.ImportBatchId ?? string.Empty; // Get batch ID from schema
 
         Console.WriteLine($"[CustomIngestion] Starting custom ingestion for {filePath} ({totalRows} rows)");
 
@@ -96,6 +114,16 @@ public class CustomTabularIngestion
         {
             try
             {
+                // Ensure schema_id and importBatchId are present in metadata
+                if (!chunk.Metadata.ContainsKey("schema_id") && !string.IsNullOrEmpty(schemaId))
+                {
+                    chunk.Metadata["schema_id"] = schemaId;
+                }
+                if (!chunk.Metadata.ContainsKey("importBatchId") && !string.IsNullOrEmpty(importBatchId))
+                {
+                    chunk.Metadata["importBatchId"] = importBatchId;
+                }
+
                 // Generate embedding for the chunk text
                 var embedding = await _embeddingGenerator.GenerateEmbeddingAsync(chunk.Content, cancellationToken);
 
@@ -117,7 +145,7 @@ public class CustomTabularIngestion
                     data: null,
                     source: chunk.Metadata.ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString() ?? string.Empty),
                     schemaId: chunk.Metadata.ContainsKey("schema_id") ? chunk.Metadata["schema_id"] : null,
-                    importBatchId: importBatchId // Use the batch ID from the schema
+                    importBatchId: chunk.Metadata.ContainsKey("importBatchId") ? chunk.Metadata["importBatchId"] : importBatchId
                 );
 
                 await _cosmosClient
