@@ -69,6 +69,9 @@ else
 }
 Console.WriteLine("=== END VERIFICATION ===\n");
 
+ClearCoreSdkListeners(); // Clear listeners to avoid excessive logging
+Console.WriteLine("Cleared Core SDK listeners.");
+
 // Create BlobStorageProcessor instances for each pipeline
 var tabularFileProcessor = new BlobStorageProcessor(
     tabularMemory,
@@ -103,7 +106,7 @@ if (tabularMemoryDb is AzureCosmosDbTabularMemory tabularDb)
             indexName: TabularIndexName
         );
         customIngestion.BatchSize = 50; // Set the batch size for ingestion
-        
+
         // Create a BlobStorageProcessor that uses the custom ingestion pipeline
         var customTabularFileProcessor = new BlobStorageProcessor(
             tabularMemory,
@@ -169,8 +172,6 @@ var standardQueryProcessor = new KernelMemoryQueryProcessor(
     appConfig.AzureOpenAITextConfig);
 
 
-ClearCoreSdkListeners(); // Clear listeners to avoid excessive logging
-Console.WriteLine("Cleared Core SDK listeners.");
 
 // This section demonstrates processing the same files through both pipelines
 Console.WriteLine("\n*** Processing files through both pipelines ***");
