@@ -1,5 +1,6 @@
 ﻿﻿using Microsoft.KernelMemory;
 using Microsoft.SemanticKernel;
+using System.Diagnostics;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
 using Microsoft.KernelMemory.MemoryStorage; // For TagCollection
@@ -141,6 +142,10 @@ var standardQueryProcessor = new KernelMemoryQueryProcessor(
     StandardIndexName,
     appConfig.AzureOpenAITextConfig);
 
+
+ClearCoreSdkListeners(); // Clear listeners to avoid excessive logging
+Console.WriteLine("Cleared Core SDK listeners.");
+
 // This section demonstrates processing the same files through both pipelines
 Console.WriteLine("\n*** Processing files through both pipelines ***");
 
@@ -181,6 +186,14 @@ async Task QueryKernelMemory()
     // 3. Present a unified answer
 }
 
+ static void ClearCoreSdkListeners() 
+ { 
+     Type defaultTrace = Type.GetType("Microsoft.Azure.Cosmos.Core.Trace.DefaultTrace,Microsoft.Azure.Cosmos.Direct"); 
+     TraceSource traceSource = (TraceSource)defaultTrace.GetProperty("TraceSource").GetValue(null); 
+     traceSource.Switch.Level = SourceLevels.All; 
+     traceSource.Listeners.Clear(); 
+ } 
+
 // Configuration class defined at the bottom
 public class CosmosDbSettings
 {
@@ -195,3 +208,5 @@ public class CosmosDbSettings
 //     public string BlobContainerUrl { get; set; } = string.Empty;
 //     public string SasToken { get; set; } = string.Empty;
 // }
+
+

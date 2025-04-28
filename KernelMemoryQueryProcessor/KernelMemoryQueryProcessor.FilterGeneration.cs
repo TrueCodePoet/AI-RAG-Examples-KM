@@ -42,7 +42,8 @@ namespace AI_RAG_Examples_KM
         5. For OR logic, use an array of patterns for a key: { ""data.purpose"": [""%corelight%"", ""%sensor%""] }
         6. Focus on return as many potential records as you can while narrowing as much as you can.  be optimistic not pessimistic.
         7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
-        8. Do Not inject filters that are not part of the question.  example.  Do not suggest a date range or project type if it was not asked for.
+        8. The Schema examples will provide example data.  This is just for example.  All filters should use the fields from the schema and the filter should be based on the users questions only.
+        9. Do Not inject filters that are not part of the question.  example.  Do not suggest a date range or project type if it was not asked for.
 
         FORMAT:
         Format the output STRICTLY as a JSON array of up to 5 filter templates (each a JSON object as described above).
@@ -85,6 +86,7 @@ namespace AI_RAG_Examples_KM
         5. For OR logic, use an array of patterns for a key: { ""data.purpose"": [""corelight"", ""sensor""] }
         6. Focus on return as many potential records as you can while narrowing as much as you can.  be optimistic not pessimistic.
         7. If no specific filter criteria matching the schema are found, output an empty JSON object: {}
+        8. The Schema examples will provide example data.  This is just for example.  All filters should use the fields from the schema and the filter should be based on the users questions only.
  
         FORMAT:
         Format the output STRICTLY as a JSON object containing the identified key-value pairs.
