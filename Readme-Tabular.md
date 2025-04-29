@@ -145,7 +145,7 @@ filter.Add("department", new[] { "IT", "Ops" }); // OR condition
 
 ```mermaid
 flowchart TD
-    A[Excel/CSV File] --> B[Tabular Decoder]
+    A[File] --> B[Tabular Decoder]
     B --> C[Schema Extraction]
     B --> D[Row Chunking]
     C --> E[Schema Record in Cosmos DB]
