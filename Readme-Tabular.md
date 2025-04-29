@@ -161,6 +161,7 @@ flowchart TD
 
 ## See Also
 
+- [KernelMemoryQueryProcessor/README.md](./KernelMemoryQueryProcessor/README.md) for detailed query processor documentation
 - [AzureCosmosDbTabular/README.md](./AzureCosmosDbTabular/README.md) for extension-specific details
 - [memory-bank/activeContext.md](./memory-bank/activeContext.md) for current project focus and recent changes
 - [memory-bank/progress.md](./memory-bank/progress.md) for project progress and known issues
