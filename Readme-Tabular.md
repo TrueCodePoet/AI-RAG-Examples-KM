@@ -150,7 +150,7 @@ flowchart TD
     B --> D[Row Chunking]
     C --> E[Schema Record in Cosmos DB]
     D --> F[Embedding Generation]
-    F --> G[Batch Insert (TransactionalBatch)]
+    F --> G[Batch Insert TransactionalBatch]
     G --> H[Row Records in Cosmos DB]
     H --> I[Query Processing]
     I --> J[Result Formatting]
