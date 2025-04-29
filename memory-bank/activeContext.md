@@ -39,6 +39,9 @@ The project is currently focused on implementing and testing the tabular data pr
 - Created normalized text representation of tabular data for embedding generation
 - Enhanced error handling for PivotTable structures in Excel files
 - Fixed schema generation to prioritize the provided file path over workbook metadata for accurate source file names
+- **Added batch ingestion support in CustomTabularIngestion:** BatchSize property enables Cosmos DB TransactionalBatch for high-throughput ingestion. Default is 1 (no batching); set to 50 for optimal performance.
+- **Ensured unique IDs per row:** Each row/chunk is assigned a unique Guid-based ID to prevent overwriting in Cosmos DB.
+- **Documented ingestion pitfalls:** If the same document ID is reused for all rows, only one record is stored per document, and previous rows are overwritten. This was a key lesson learned and is now avoided in all ingestion pipelines.
 
 ### Cosmos DB Integration
 - Developed AzureCosmosDbTabularMemory implementation for structured data storage
@@ -53,6 +56,8 @@ The project is currently focused on implementing and testing the tabular data pr
   - Ensured `TabularCsvDecoder` generates the exact same "text" sentence format as the Excel decoder for parser compatibility.
   - Added logging to `TabularCsvDecoder` to track lines read vs. rows added for diagnosing potential row skipping issues.
   - Resolved `System.FormatException` during record retrieval by ensuring all record IDs are Base64 encoded using `EncodeId` before storage (verified in `FromMemoryRecord`).
+- **Performance optimization:** Batch ingestion with TransactionalBatch is now available for high-throughput scenarios. Batch size is configurable; 50 is recommended for most cases.
+- **Best practices:** Always use unique IDs per row, group by partition key for batching, and monitor for Cosmos DB 413 errors to adjust batch size.
 
 ### Query Processing
 - Enhanced KernelMemoryQueryProcessor with filter generation capabilities

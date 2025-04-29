@@ -243,6 +243,37 @@ filter.Add("department", "IT");
 var results = await memory.SearchAsync(filter: filter);
 ```
 
+## Batch Ingestion and Performance
+
+### Batch Insert Support (CustomTabularIngestion)
+
+The custom ingestion pipeline now supports batch inserts using Cosmos DB's `TransactionalBatch` API. This can drastically speed up ingestion for large files, especially when all rows share the same partition key (file name).
+
+- **BatchSize property:** Set `BatchSize` on your `CustomTabularIngestion` instance. If `BatchSize == 1`, single inserts are used (default). If `BatchSize > 1`, records are inserted in batches of the specified size.
+- **Recommended batch size:** Start with 50. Adjust up or down based on document size and RU/s budget. Cosmos DB limits batches to 100 operations or 2MB per batch.
+- **Usage example:**
+  ```csharp
+  var customIngestion = new CustomTabularIngestion(...);
+  customIngestion.BatchSize = 50; // Enable batching
+  await customIngestion.ImportTabularDocumentCustomAsync(...);
+  ```
+
+### Best Practices and Lessons Learned
+
+- **Unique IDs per Row:** Each row/chunk must have a unique `Id` (e.g., `Guid.NewGuid().ToString()`). If the same document ID is reused for all rows, only one record will be stored per document, and previous rows will be overwritten.
+- **Partition Key:** All rows from the same file should use the same partition key (typically the file name) to enable efficient batch operations.
+- **Batching:** Use batching for large ingestions to maximize throughput and minimize RU/s consumption.
+- **Metadata:** Always include metadata such as worksheet name, row number, schema ID, and import batch ID for traceability and advanced querying.
+- **Error Handling:** Monitor for 413 (Payload Too Large) errors and reduce batch size if needed.
+
+### Example: Enabling Batch Ingestion
+
+```csharp
+var customIngestion = new CustomTabularIngestion(...);
+customIngestion.BatchSize = 50; // Use batch size of 50 for ingestion
+await customIngestion.ImportTabularDocumentCustomAsync("myfile.xlsx", "my-dataset");
+```
+
 ## Implementation Details
 
 The extension creates a database (default name "memory", configurable via `DatabaseName`) in your Azure Cosmos DB account. Each memory index is stored as a separate container within this database.

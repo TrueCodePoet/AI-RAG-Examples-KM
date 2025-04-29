@@ -38,6 +38,12 @@ flowchart TD
 
 ## Key Design Patterns
 
+### Batch Ingestion & Unique ID Pattern
+- **Batch Ingestion:** The custom ingestion pipeline supports batch inserts using Cosmos DB TransactionalBatch. Batch size is configurable (BatchSize property, recommended 50). This enables high-throughput ingestion for large files.
+- **Unique ID Assignment:** Each row/chunk is assigned a unique Guid-based ID to prevent overwrites in Cosmos DB. Reusing the same document ID for all rows causes only one record to be stored per document, overwriting previous rows.
+- **Partition Key:** All rows from the same file use the same partition key (file name) to enable efficient batch operations.
+- **Best Practice:** Always use unique IDs per row and group by partition key for batching.
+
 ### 1. Dependency Injection & Configurable Fuzzy Matching
 - Configuration is loaded from appsettings.json and injected into components
 - Services like IKernelMemory, IMemoryDb, and Kernel are initialized with their dependencies
@@ -146,6 +152,11 @@ flowchart TD
 ## Technical Decisions
 
 1. **Azure Cosmos DB for Storage**
+   - Provides flexible schema for different document types
+   - Supports efficient vector search for embeddings
+   - Allows for structured queries on tabular data
+   - **Batch Ingestion:** Use TransactionalBatch for high-throughput scenarios. Monitor for 413 errors and adjust batch size as needed.
+   - **Unique IDs:** Always assign a unique ID per row/chunk to prevent data loss from overwrites.
    - Provides flexible schema for different document types
    - Supports efficient vector search for embeddings
    - Allows for structured queries on tabular data

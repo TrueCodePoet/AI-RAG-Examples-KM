@@ -149,7 +149,8 @@ The query processing can be extended with additional strategies or post-processi
 ## Performance Considerations
 
 ### Optimizations
-- Batch processing for multiple documents
+- Batch ingestion with TransactionalBatch in CustomTabularIngestion (BatchSize property, recommended 50)
+- Unique ID assignment per row to prevent overwrites in Cosmos DB
 - Efficient partitioning strategies for large documents
 - Cosmos DB indexing policies for tabular data
 - Caching of frequently accessed data

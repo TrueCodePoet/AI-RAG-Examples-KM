@@ -74,6 +74,8 @@ The project is in a functional prototype stage, with core components implemented
 
 ### Document Processing Enhancements
 - ✅ CSV support implemented
+- ✅ Batch ingestion with TransactionalBatch in CustomTabularIngestion (BatchSize property, recommended 50)
+- ✅ Unique ID assignment per row to prevent overwrites in Cosmos DB
 - ❌ Support for additional tabular formats (JSON, etc.)
 - ❌ Advanced Excel feature support (formulas, charts, etc.)
 - ❌ Batch processing for multiple documents
