@@ -243,6 +243,110 @@ filter.Add("department", "IT");
 var results = await memory.SearchAsync(filter: filter);
 ```
 
+## Advanced Filtering and Fuzzy Matching
+
+### Fuzzy Match Configuration
+
+The tabular extension supports fuzzy matching for structured data fields using either `LIKE` or `CONTAINS` operators, as well as case-insensitive matching. These are fully configurable via `appsettings.json`:
+
+```json
+{
+  "KernelMemory": {
+    "Services": {
+      "AzureCosmosDbTabular": {
+        "Endpoint": "...",
+        "APIKey": "...",
+        "FuzzyMatch": {
+          "Enabled": true,
+          "Operator": "LIKE", // or "CONTAINS"
+          "CaseInsensitive": true,
+          "MinimumLength": 3
+        }
+      }
+    }
+  }
+}
+```
+
+- **Operator:** `"LIKE"` uses SQL LIKE patterns (with `%` and `_` wildcards). `"CONTAINS"` uses the Cosmos DB CONTAINS function for substring matching.
+- **CaseInsensitive:** If true, all comparisons are done in lower case.
+- **MinimumLength:** Minimum string length for fuzzy matching to apply.
+
+### Filter Logic
+
+- **AND/OR Logic:** Multiple keys in a filter are combined as AND conditions. Arrays for a key (e.g., `"project": ["phoenix", "austin"]`) are combined as OR conditions.
+- **Explicit LIKE Patterns:** If a filter value contains `%` or `_`, it is treated as a LIKE pattern regardless of the fuzzy match setting.
+- **Tag Filters:** Tag filters use EXISTS subqueries for case-insensitive matching.
+- **Hybrid Filters:** You can combine tag filters and data field filters in the same query.
+
+### Examples
+
+#### Exact Match
+
+```csharp
+var filter = new MemoryFilter();
+filter.Add("data.Environment", "Production"); // Exact match
+```
+
+#### Fuzzy Match (LIKE)
+
+```csharp
+// With FuzzyMatch.Operator = "LIKE"
+var filter = new MemoryFilter();
+filter.Add("data.ServerName", "SVR"); // Will match any server name containing "SVR"
+```
+
+#### Fuzzy Match (CONTAINS)
+
+```csharp
+// With FuzzyMatch.Operator = "CONTAINS"
+var filter = new MemoryFilter();
+filter.Add("data.Location", "East"); // Will match any location containing "East"
+```
+
+#### Explicit LIKE Pattern
+
+```csharp
+var filter = new MemoryFilter();
+filter.Add("data.ServerName", "%SVR%"); // Treated as LIKE pattern
+```
+
+#### OR Condition (Array)
+
+```csharp
+var filter = new MemoryFilter();
+filter.Add("data.Environment", new[] { "Production", "Staging" }); // Matches either value
+```
+
+#### Tag Filter (Case-Insensitive)
+
+```csharp
+var filter = new MemoryFilter();
+filter.Add("department", "IT"); // Tag filter, case-insensitive
+```
+
+#### Hybrid Filter
+
+```csharp
+var filter = new MemoryFilter();
+filter.Add("data.Environment", "Production");
+filter.Add("department", "IT");
+```
+
+### Query Execution
+
+```csharp
+var results = await memory.SearchAsync(filter: filter);
+```
+
+### Notes
+
+- All structured data field filters must use the `data.` prefix (e.g., `data.Environment`).
+- Field names are normalized to snake_case for querying.
+- Arrays for a key are ORed; multiple keys are ANDed.
+- Fuzzy matching applies only to string fields and when enabled/configured.
+- Tag filters are always case-insensitive.
+
 ## Batch Ingestion and Performance
 
 ### Batch Insert Support (CustomTabularIngestion)
